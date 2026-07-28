@@ -1,0 +1,5 @@
+# This directory stores Alembic migration scripts.
+# Each migration is auto-named by Alembic in the format:
+#   <revision_id>_<message>.py
+#
+# Do not edit files in this directory manually unless you know what you are doing.

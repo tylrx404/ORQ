@@ -1,18 +1,13 @@
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+"""
+app/db/engine.py
+----------------
+Re-exports the async engine from the canonical `app.core.database` module.
 
-from app.core.config import settings
+This shim preserves backwards-compatibility for any existing imports of
+`app.db.engine.engine` or `app.db.engine.AsyncSessionLocal` while keeping
+the single source of truth in `app.core.database`.
+"""
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=False,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True
-)
+from app.core.database import AsyncSessionLocal, engine
 
-AsyncSessionLocal = async_sessionmaker(
-    engine,
-    expire_on_commit=False,
-    autocommit=False,
-    autoflush=False
-)
+__all__ = ["engine", "AsyncSessionLocal"]
