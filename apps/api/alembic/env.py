@@ -33,7 +33,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # Import application objects AFTER adjusting sys.path.
 # ---------------------------------------------------------------------------
 from app.core.config import settings  # noqa: E402
-from app.db.base import Base  # noqa: E402
+
+# Import registry (not base directly) so that ALL models are registered in
+# Base.metadata before autogenerate inspects it.  Adding a new model only
+# requires updating app/db/registry.py.
+from app.db.registry import Base  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Alembic Config object (gives access to alembic.ini values).
