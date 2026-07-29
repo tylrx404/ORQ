@@ -84,7 +84,7 @@ class User(Base):
         Boolean,
         nullable=False,
         default=True,
-        server_default="true",
+        server_default=func.true(),
     )
 
     is_verified: Mapped[bool] = mapped_column(
@@ -132,10 +132,10 @@ class User(Base):
     )
 
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        server_onupdate=func.now(),
+    DateTime(timezone=True),
+    nullable=False,
+    server_default=func.now(),
+    onupdate=func.now(),
     )
 
     def __repr__(self) -> str:
