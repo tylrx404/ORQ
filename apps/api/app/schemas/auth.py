@@ -1,10 +1,15 @@
+from typing import Optional
+from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 class UserSignupRequest(BaseModel):
     email: EmailStr
+    username: str
     password: str
-    full_name: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
 
 
 class UserLoginRequest(BaseModel):
@@ -18,8 +23,10 @@ class TokenResponse(BaseModel):
 
 
 class UserResponse(BaseModel):
-    id: str
+    id: UUID
     email: EmailStr
-    full_name: str
+    username: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
