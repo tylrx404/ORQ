@@ -7,8 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.jwt import TokenError, decode_access_token
 from app.models.user import User
+from app.repositories.organization_repository import OrganizationRepository
 from app.repositories.user_repository import UserRepository
 from app.services.auth import AuthService
+from app.services.organization import OrganizationService
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/v1/auth/login"
@@ -24,6 +26,18 @@ def get_auth_service(
 ) -> AuthService:
     """Provide an AuthService instance."""
     return AuthService(user_repository)
+
+
+def get_organization_repository(db: AsyncSession = Depends(get_db)) -> OrganizationRepository:
+    """Provide an OrganizationRepository instance."""
+    return OrganizationRepository(db)
+
+
+def get_organization_service(
+    organization_repository: OrganizationRepository = Depends(get_organization_repository),
+) -> OrganizationService:
+    """Provide an OrganizationService instance."""
+    return OrganizationService(organization_repository)
 
 
 async def get_current_user(
