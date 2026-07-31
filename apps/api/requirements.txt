@@ -8,6 +8,7 @@ uvicorn[standard]>=0.29.0,<1.0.0
 # Data validation & settings
 pydantic>=2.7.0,<3.0.0
 pydantic-settings>=2.2.1,<3.0.0
+email-validator>=2.2.0
 
 # Database — async SQLAlchemy 2.x + asyncpg driver
 sqlalchemy[asyncio]>=2.0.0,<3.0.0

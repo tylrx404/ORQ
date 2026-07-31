@@ -9,5 +9,6 @@ which entry-point is used to start the application.
 """
 
 from app.models.user import User
+from app.models.organization import Organization
 
-__all__ = ["User"]
+__all__ = ["User", "Organization"]
