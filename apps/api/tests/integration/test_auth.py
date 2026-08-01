@@ -9,7 +9,6 @@ from app.models.user import User
 from app.core.security import hash_password
 from app.core.jwt import create_access_token
 
-
 class MockUserRepository:
     def __init__(self):
         self.users = {}
@@ -31,8 +30,20 @@ class MockUserRepository:
         user.id = uuid4()
         user.created_at = datetime.now(timezone.utc)
         user.updated_at = datetime.now(timezone.utc)
+
+    # Simulate database defaults
+        if user.is_active is None:
+            user.is_active = True
+
+        if user.is_verified is None:
+            user.is_verified = False
+
+        if user.is_superuser is None:
+            user.is_superuser = False
+
         self.users[user.email] = user
         self.users_by_username[user.username] = user
+
         return user
 
 
@@ -57,7 +68,7 @@ def valid_signup_payload():
 
 @pytest.mark.asyncio
 async def test_signup_success(client: AsyncClient, mock_user_repo, valid_signup_payload):
-    response = await client.post("/v1/auth/signup", json=valid_signup_payload)
+    response = await client.post("/api/v1/auth/signup", json=valid_signup_payload)
     assert response.status_code == 201
     data = response.json()
     assert data["email"] == valid_signup_payload["email"]
@@ -68,13 +79,13 @@ async def test_signup_success(client: AsyncClient, mock_user_repo, valid_signup_
 @pytest.mark.asyncio
 async def test_signup_duplicate_email(client: AsyncClient, mock_user_repo, valid_signup_payload):
     # First signup
-    await client.post("/v1/auth/signup", json=valid_signup_payload)
+    await client.post("/api/v1/auth/signup", json=valid_signup_payload)
     
     # Second signup with same email, different username
     payload = valid_signup_payload.copy()
     payload["username"] = "different_username"
     
-    response = await client.post("/v1/auth/signup", json=payload)
+    response = await client.post("/api/v1/auth/signup", json=payload)
     assert response.status_code == 409
     assert "Email already registered" in response.json()["detail"]
 
@@ -82,13 +93,13 @@ async def test_signup_duplicate_email(client: AsyncClient, mock_user_repo, valid
 @pytest.mark.asyncio
 async def test_signup_duplicate_username(client: AsyncClient, mock_user_repo, valid_signup_payload):
     # First signup
-    await client.post("/v1/auth/signup", json=valid_signup_payload)
+    await client.post("/api/v1/auth/signup", json=valid_signup_payload)
     
     # Second signup with same username, different email
     payload = valid_signup_payload.copy()
     payload["email"] = "different@example.com"
     
-    response = await client.post("/v1/auth/signup", json=payload)
+    response = await client.post("/api/v1/auth/signup", json=payload)
     assert response.status_code == 409
     assert "already taken" in response.json()["detail"]
 
@@ -96,14 +107,15 @@ async def test_signup_duplicate_username(client: AsyncClient, mock_user_repo, va
 @pytest.mark.asyncio
 async def test_login_success(client: AsyncClient, mock_user_repo, valid_signup_payload):
     # Create user first
-    await client.post("/v1/auth/signup", json=valid_signup_payload)
-    
+    await client.post("/api/v1/auth/signup", json=valid_signup_payload)
+    user = await mock_user_repo.get_by_email(valid_signup_payload["email"])
+
     login_payload = {
         "email": valid_signup_payload["email"],
         "password": valid_signup_payload["password"]
     }
-    
-    response = await client.post("/v1/auth/login", json=login_payload)
+
+    response = await client.post("/api/v1/auth/login", json=login_payload)
     assert response.status_code == 200
     data = response.json()
     assert "access_token" in data
@@ -113,14 +125,14 @@ async def test_login_success(client: AsyncClient, mock_user_repo, valid_signup_p
 @pytest.mark.asyncio
 async def test_login_invalid_password(client: AsyncClient, mock_user_repo, valid_signup_payload):
     # Create user first
-    await client.post("/v1/auth/signup", json=valid_signup_payload)
-    
+    await client.post("/api/v1/auth/signup", json=valid_signup_payload)
+    user = await mock_user_repo.get_by_email(valid_signup_payload["email"])
     login_payload = {
         "email": valid_signup_payload["email"],
         "password": "WrongPassword!"
     }
     
-    response = await client.post("/v1/auth/login", json=login_payload)
+    response = await client.post("/api/v1/auth/login", json=login_payload)
     assert response.status_code == 401
     assert "Invalid email or password" in response.json()["detail"]
 
@@ -128,7 +140,7 @@ async def test_login_invalid_password(client: AsyncClient, mock_user_repo, valid
 @pytest.mark.asyncio
 async def test_login_inactive_user(client: AsyncClient, mock_user_repo, valid_signup_payload):
     # Create user first
-    await client.post("/v1/auth/signup", json=valid_signup_payload)
+    await client.post("/api/v1/auth/signup", json=valid_signup_payload)
     
     # Disable user in mock repo
     user = await mock_user_repo.get_by_email(valid_signup_payload["email"])
@@ -139,7 +151,7 @@ async def test_login_inactive_user(client: AsyncClient, mock_user_repo, valid_si
         "password": valid_signup_payload["password"]
     }
     
-    response = await client.post("/v1/auth/login", json=login_payload)
+    response = await client.post("/api/v1/auth/login", json=login_payload)
     assert response.status_code == 403
     assert "User account is disabled" in response.json()["detail"]
 
@@ -147,18 +159,18 @@ async def test_login_inactive_user(client: AsyncClient, mock_user_repo, valid_si
 @pytest.mark.asyncio
 async def test_users_me_with_valid_token(client: AsyncClient, mock_user_repo, valid_signup_payload):
     # Create user
-    signup_resp = await client.post("/v1/auth/signup", json=valid_signup_payload)
+    signup_resp = await client.post("/api/v1/auth/signup", json=valid_signup_payload)
     
     # Login to get token
     login_payload = {
         "email": valid_signup_payload["email"],
         "password": valid_signup_payload["password"]
     }
-    login_resp = await client.post("/v1/auth/login", json=login_payload)
+    login_resp = await client.post("/api/v1/auth/login", json=login_payload)
     token = login_resp.json()["access_token"]
     
     # Access /users/me
-    response = await client.get("/v1/users/me", headers={"Authorization": f"Bearer {token}"})
+    response = await client.get("/api/v1/users/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     data = response.json()
     assert data["email"] == valid_signup_payload["email"]
@@ -167,13 +179,13 @@ async def test_users_me_with_valid_token(client: AsyncClient, mock_user_repo, va
 
 @pytest.mark.asyncio
 async def test_users_me_without_token(client: AsyncClient):
-    response = await client.get("/v1/users/me")
+    response = await client.get("/api/v1/users/me")
     assert response.status_code == 401
     assert response.json()["detail"] == "Not authenticated"
 
 
 @pytest.mark.asyncio
 async def test_users_me_with_invalid_token(client: AsyncClient):
-    response = await client.get("/v1/users/me", headers={"Authorization": "Bearer invalid.token.string"})
+    response = await client.get("/api/v1/users/me", headers={"Authorization": "Bearer invalid.token.string"})
     assert response.status_code == 401
     assert "Could not validate credentials" in response.json()["detail"]
