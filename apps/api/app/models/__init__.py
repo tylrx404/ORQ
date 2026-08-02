@@ -11,5 +11,6 @@ which entry-point is used to start the application.
 from app.models.user import User
 from app.models.organization import Organization
 from app.models.organization_membership import OrganizationMembership
+from app.models.organization_invitation import OrganizationInvitation
 
-__all__ = ["User", "Organization", "OrganizationMembership"]
+__all__ = ["User", "Organization", "OrganizationMembership", "OrganizationInvitation"]

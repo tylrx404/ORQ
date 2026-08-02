@@ -1,18 +1,22 @@
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Path, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.jwt import TokenError, decode_access_token
+from app.core.permissions import Permission, has_permission
+from app.models.organization_membership import OrganizationMembership
 from app.models.user import User
 from app.repositories.organization_repository import OrganizationRepository
 from app.repositories.organization_membership_repository import OrganizationMembershipRepository
+from app.repositories.organization_invitation_repository import OrganizationInvitationRepository
 from app.repositories.user_repository import UserRepository
 from app.services.auth import AuthService
 from app.services.organization import OrganizationService
 from app.services.organization_membership import OrganizationMembershipService
+from app.services.organization_invitation import OrganizationInvitationService
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/v1/auth/login"
@@ -52,6 +56,19 @@ def get_organization_membership_service(
 ) -> OrganizationMembershipService:
     """Provide an OrganizationMembershipService instance."""
     return OrganizationMembershipService(membership_repository)
+
+
+def get_organization_invitation_repository(db: AsyncSession = Depends(get_db)) -> OrganizationInvitationRepository:
+    """Provide an OrganizationInvitationRepository instance."""
+    return OrganizationInvitationRepository(db)
+
+
+def get_organization_invitation_service(
+    invitation_repository: OrganizationInvitationRepository = Depends(get_organization_invitation_repository),
+    membership_service: OrganizationMembershipService = Depends(get_organization_membership_service),
+) -> OrganizationInvitationService:
+    """Provide an OrganizationInvitationService instance."""
+    return OrganizationInvitationService(invitation_repository, membership_service)
 
 
 async def get_current_user(
@@ -98,3 +115,54 @@ async def get_current_user(
         )
 
     return user
+
+
+async def get_current_membership(
+    organization_id: UUID = Path(...),
+    current_user: User = Depends(get_current_user),
+    membership_repo: OrganizationMembershipRepository = Depends(get_organization_membership_repository),
+) -> OrganizationMembership:
+    """Retrieve the membership of the currently authenticated user in the requested organization."""
+    membership = await membership_repo.get_membership(organization_id, current_user.id)
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization membership not found."
+        )
+    return membership
+
+
+def require_member(
+    membership: OrganizationMembership = Depends(get_current_membership),
+) -> OrganizationMembership:
+    """Ensure the user has member permissions."""
+    if not has_permission(membership.role, Permission.VIEW_MEMBERS):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. Requires member role."
+        )
+    return membership
+
+
+def require_admin(
+    membership: OrganizationMembership = Depends(get_current_membership),
+) -> OrganizationMembership:
+    """Ensure the user has admin permissions."""
+    if not has_permission(membership.role, Permission.UPDATE_ORGANIZATION):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. Requires admin or owner role."
+        )
+    return membership
+
+
+def require_owner(
+    membership: OrganizationMembership = Depends(get_current_membership),
+) -> OrganizationMembership:
+    """Ensure the user has owner permissions."""
+    if not has_permission(membership.role, Permission.DELETE_ORGANIZATION):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. Requires owner role."
+        )
+    return membership

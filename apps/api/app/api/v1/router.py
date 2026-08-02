@@ -3,6 +3,8 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     auth,
     health,
+    invitations,
+    organization_invitations,
     organization_memberships,
     organizations,
     ready,
@@ -16,7 +18,15 @@ api_router.include_router(organizations.router, prefix="/organizations", tags=["
 api_router.include_router(
     organization_memberships.router,
     prefix="/organizations/{organization_id}/members",
-    tags=["organization_memberships"],
+    tags=["organization memberships"],
+)
+api_router.include_router(
+    organization_invitations.router,
+    prefix="/organizations/{organization_id}/invitations",
+    tags=["organization invitations"],
+)
+api_router.include_router(
+    invitations.router, prefix="/invitations", tags=["invitations"]
 )
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(health.router, prefix="/health", tags=["system"])

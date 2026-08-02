@@ -3,7 +3,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.dependencies import get_organization_membership_service
+from app.api.dependencies import (
+    get_organization_membership_service,
+    require_admin,
+    require_member,
+    require_owner,
+)
 from app.schemas.organization_membership import (
     MembershipCreateRequest,
     MembershipResponse,
@@ -19,10 +24,11 @@ router = APIRouter()
 
 
 @router.post(
-    "/",
+    "",
     response_model=MembershipResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Add a member to an organization",
+    dependencies=[Depends(require_admin)],
 )
 async def add_member(
     organization_id: UUID,
@@ -47,6 +53,7 @@ async def add_member(
     "",
     response_model=List[MembershipResponse],
     summary="List organization members",
+    dependencies=[Depends(require_member)],
 )
 async def list_members(
     organization_id: UUID,
@@ -64,6 +71,7 @@ async def list_members(
     "/{user_id}",
     response_model=MembershipResponse,
     summary="Update a member's role",
+    dependencies=[Depends(require_owner)],
 )
 async def update_role(
     organization_id: UUID,
@@ -89,6 +97,7 @@ async def update_role(
     "/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Remove a member from an organization",
+    dependencies=[Depends(require_admin)],
 )
 async def remove_member(
     organization_id: UUID,

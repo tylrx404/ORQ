@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from app.api.dependencies import get_organization_service
+from app.api.dependencies import get_organization_service, require_admin, require_owner
 from app.schemas.organization import (
     OrganizationCreateRequest,
     OrganizationResponse,
@@ -78,6 +78,7 @@ async def get_organization(
     "/{organization_id}",
     response_model=OrganizationResponse,
     summary="Update an organization",
+    dependencies=[Depends(require_admin)],
 )
 async def update_organization(
     organization_id: UUID,
@@ -104,6 +105,7 @@ async def update_organization(
     "/{organization_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete an organization",
+    dependencies=[Depends(require_owner)],
 )
 async def delete_organization(
     organization_id: UUID,
