@@ -12,5 +12,6 @@ from app.models.user import User
 from app.models.organization import Organization
 from app.models.organization_membership import OrganizationMembership
 from app.models.organization_invitation import OrganizationInvitation
+from app.models.provider import Provider
 
-__all__ = ["User", "Organization", "OrganizationMembership", "OrganizationInvitation"]
+__all__ = ["User", "Organization", "OrganizationMembership", "OrganizationInvitation", "Provider"]

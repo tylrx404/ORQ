@@ -7,6 +7,8 @@ from app.api.v1.endpoints import (
     organization_invitations,
     organization_memberships,
     organizations,
+    organization_providers,
+    providers,
     ready,
     users,
     version,
@@ -27,6 +29,14 @@ api_router.include_router(
 )
 api_router.include_router(
     invitations.router, prefix="/invitations", tags=["invitations"]
+)
+api_router.include_router(
+    organization_providers.router,
+    prefix="/organizations/{organization_id}/providers",
+    tags=["organization providers"],
+)
+api_router.include_router(
+    providers.router, prefix="/providers", tags=["providers"]
 )
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(health.router, prefix="/health", tags=["system"])
