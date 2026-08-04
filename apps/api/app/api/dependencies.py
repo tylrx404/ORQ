@@ -16,11 +16,13 @@ from app.repositories.organization_membership_repository import OrganizationMemb
 from app.repositories.organization_invitation_repository import OrganizationInvitationRepository
 from app.repositories.user_repository import UserRepository
 from app.repositories.provider_repository import ProviderRepository
+from app.repositories.provider_model_repository import ProviderModelRepository
 from app.services.auth import AuthService
 from app.services.organization import OrganizationService
 from app.services.organization_membership import OrganizationMembershipService
 from app.services.organization_invitation import OrganizationInvitationService
 from app.services.provider import ProviderService
+from app.services.provider_model import ProviderModelService
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/v1/auth/login"
@@ -209,5 +211,46 @@ async def require_provider_admin(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions. Requires admin or owner role."
+        )
+    return provider
+
+
+def get_provider_model_repository(db: AsyncSession = Depends(get_db)) -> ProviderModelRepository:
+    """Provide a ProviderModelRepository instance."""
+    return ProviderModelRepository(db)
+
+
+def get_provider_model_service(
+    provider_model_repository: ProviderModelRepository = Depends(get_provider_model_repository),
+) -> ProviderModelService:
+    """Provide a ProviderModelService instance."""
+    return ProviderModelService(provider_model_repository)
+
+
+async def require_provider_member(
+    provider_id: UUID = Path(...),
+    current_user: User = Depends(get_current_user),
+    provider_repo: ProviderRepository = Depends(get_provider_repository),
+    membership_repo: OrganizationMembershipRepository = Depends(get_organization_membership_repository),
+) -> Provider:
+    """Ensure the user is a member of the organization owning the provider."""
+    provider = await provider_repo.get_by_id(provider_id)
+    if not provider:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Provider not found."
+        )
+
+    membership = await membership_repo.get_membership(provider.organization_id, current_user.id)
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization membership not found."
+        )
+
+    if not has_permission(membership.role, Permission.VIEW_MEMBERS):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. Requires member role."
         )
     return provider
