@@ -3,9 +3,12 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     api_keys,
     auth,
+    chat_completions,
+    execution,
     health,
     invitations,
     organization_api_keys,
+    organization_executions,
     organization_invitations,
     organization_memberships,
     organization_provider_models,
@@ -58,7 +61,18 @@ api_router.include_router(
     tags=["organization api keys"],
 )
 api_router.include_router(
+    organization_executions.router,
+    prefix="/organizations/{organization_id}/executions",
+    tags=["organization executions"],
+)
+api_router.include_router(
     api_keys.router, prefix="/api-keys", tags=["api keys"]
+)
+api_router.include_router(
+    execution.router, prefix="/executions", tags=["executions"]
+)
+api_router.include_router(
+    chat_completions.router, prefix="/chat/completions", tags=["chat completions"]
 )
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(health.router, prefix="/health", tags=["system"])

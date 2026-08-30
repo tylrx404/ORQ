@@ -18,6 +18,7 @@ from app.repositories.user_repository import UserRepository
 from app.repositories.provider_repository import ProviderRepository
 from app.models.provider_model import ProviderModel
 from app.models.api_key import ApiKey
+from app.models.execution_log import ExecutionLog
 from app.repositories.organization_repository import OrganizationRepository
 from app.repositories.organization_membership_repository import OrganizationMembershipRepository
 from app.repositories.organization_invitation_repository import OrganizationInvitationRepository
@@ -25,6 +26,7 @@ from app.repositories.user_repository import UserRepository
 from app.repositories.provider_repository import ProviderRepository
 from app.repositories.provider_model_repository import ProviderModelRepository
 from app.repositories.api_key_repository import ApiKeyRepository
+from app.repositories.execution_log_repository import ExecutionLogRepository
 from app.services.auth import AuthService
 from app.services.organization import OrganizationService
 from app.services.organization_membership import OrganizationMembershipService
@@ -32,6 +34,7 @@ from app.services.organization_invitation import OrganizationInvitationService
 from app.services.provider import ProviderService
 from app.services.provider_model import ProviderModelService
 from app.services.api_key import ApiKeyService, InvalidApiKeyError
+from app.services.llm_gateway import LLMGatewayService
 
 from fastapi.security import APIKeyHeader
 
@@ -326,3 +329,48 @@ async def get_current_api_key(
             detail=str(e),
             headers={"WWW-Authenticate": "ApiKey"},
         )
+
+
+def get_execution_log_repository(
+    db: AsyncSession = Depends(get_db),
+) -> ExecutionLogRepository:
+    """Provide an ExecutionLogRepository instance."""
+    return ExecutionLogRepository(db)
+
+
+def get_llm_gateway_service(
+    provider_repo: ProviderRepository = Depends(get_provider_repository),
+    model_repo: ProviderModelRepository = Depends(get_provider_model_repository),
+    execution_log_repo: ExecutionLogRepository = Depends(get_execution_log_repository),
+) -> LLMGatewayService:
+    """Provide an LLMGatewayService instance."""
+    return LLMGatewayService(provider_repo, model_repo, execution_log_repo)
+
+
+async def require_execution_member(
+    execution_id: UUID = Path(...),
+    current_user: User = Depends(get_current_user),
+    execution_log_repo: ExecutionLogRepository = Depends(get_execution_log_repository),
+    membership_repo: OrganizationMembershipRepository = Depends(get_organization_membership_repository),
+) -> ExecutionLog:
+    """Ensure the user is a member of the organization owning the execution log."""
+    execution_log = await execution_log_repo.get_by_id(execution_id)
+    if not execution_log:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Execution log not found."
+        )
+
+    membership = await membership_repo.get_membership(execution_log.organization_id, current_user.id)
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization membership not found."
+        )
+
+    if not has_permission(membership.role, Permission.VIEW_MEMBERS):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. Requires member role."
+        )
+    return execution_log
