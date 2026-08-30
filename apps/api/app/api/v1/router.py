@@ -1,16 +1,18 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
+    api_keys,
     auth,
     health,
     invitations,
+    organization_api_keys,
     organization_invitations,
     organization_memberships,
-    organizations,
-    organization_providers,
     organization_provider_models,
-    providers,
+    organization_providers,
+    organizations,
     provider_models,
+    providers,
     ready,
     users,
     version,
@@ -49,6 +51,14 @@ api_router.include_router(
     provider_models.router,
     prefix="/providers/{provider_id}/models",
     tags=["provider models"],
+)
+api_router.include_router(
+    organization_api_keys.router,
+    prefix="/organizations/{organization_id}/api-keys",
+    tags=["organization api keys"],
+)
+api_router.include_router(
+    api_keys.router, prefix="/api-keys", tags=["api keys"]
 )
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(health.router, prefix="/health", tags=["system"])

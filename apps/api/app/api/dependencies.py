@@ -16,13 +16,26 @@ from app.repositories.organization_membership_repository import OrganizationMemb
 from app.repositories.organization_invitation_repository import OrganizationInvitationRepository
 from app.repositories.user_repository import UserRepository
 from app.repositories.provider_repository import ProviderRepository
+from app.models.provider_model import ProviderModel
+from app.models.api_key import ApiKey
+from app.repositories.organization_repository import OrganizationRepository
+from app.repositories.organization_membership_repository import OrganizationMembershipRepository
+from app.repositories.organization_invitation_repository import OrganizationInvitationRepository
+from app.repositories.user_repository import UserRepository
+from app.repositories.provider_repository import ProviderRepository
 from app.repositories.provider_model_repository import ProviderModelRepository
+from app.repositories.api_key_repository import ApiKeyRepository
 from app.services.auth import AuthService
 from app.services.organization import OrganizationService
 from app.services.organization_membership import OrganizationMembershipService
 from app.services.organization_invitation import OrganizationInvitationService
 from app.services.provider import ProviderService
 from app.services.provider_model import ProviderModelService
+from app.services.api_key import ApiKeyService, InvalidApiKeyError
+
+from fastapi.security import APIKeyHeader
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/v1/auth/login"
@@ -254,3 +267,62 @@ async def require_provider_member(
             detail="Not enough permissions. Requires member role."
         )
     return provider
+
+
+def get_api_key_repository(db: AsyncSession = Depends(get_db)) -> ApiKeyRepository:
+    """Provide an ApiKeyRepository instance."""
+    return ApiKeyRepository(db)
+
+
+def get_api_key_service(
+    api_key_repository: ApiKeyRepository = Depends(get_api_key_repository),
+) -> ApiKeyService:
+    """Provide an ApiKeyService instance."""
+    return ApiKeyService(api_key_repository)
+
+
+async def require_api_key_admin(
+    key_id: UUID = Path(...),
+    current_user: User = Depends(get_current_user),
+    api_key_repo: ApiKeyRepository = Depends(get_api_key_repository),
+    membership_repo: OrganizationMembershipRepository = Depends(get_organization_membership_repository),
+) -> ApiKey:
+    """Ensure the user has admin permissions for the organization owning the API key."""
+    api_key = await api_key_repo.get_by_id(key_id)
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="API key not found."
+        )
+
+    membership = await membership_repo.get_membership(api_key.organization_id, current_user.id)
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization membership not found."
+        )
+
+    if not has_permission(membership.role, Permission.UPDATE_ORGANIZATION):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. Requires admin or owner role."
+        )
+    return api_key
+
+
+async def get_current_api_key(
+    x_api_key: str = Depends(api_key_header),
+    api_key_service: ApiKeyService = Depends(get_api_key_service),
+) -> ApiKey:
+    """
+    Authenticate a machine-to-machine request using the X-API-Key header.
+    Validates the key and returns the ApiKey metadata.
+    """
+    try:
+        return await api_key_service.validate_key(x_api_key)
+    except InvalidApiKeyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
