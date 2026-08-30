@@ -36,6 +36,8 @@ from app.services.provider_model import ProviderModelService
 from app.services.api_key import ApiKeyService, InvalidApiKeyError
 from app.services.llm_gateway import LLMGatewayService
 from app.services.usage import UsageService
+from app.services.rate_limit import RateLimitService
+from app.redis.client import redis_manager
 
 from fastapi.security import APIKeyHeader
 
@@ -382,3 +384,8 @@ def get_usage_service(
 ) -> UsageService:
     """Provide a UsageService instance."""
     return UsageService(execution_log_repo)
+
+
+def get_rate_limit_service() -> RateLimitService:
+    """Provide a RateLimitService instance."""
+    return RateLimitService(redis_manager.get_client())
