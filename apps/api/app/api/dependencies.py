@@ -35,6 +35,7 @@ from app.services.provider import ProviderService
 from app.services.provider_model import ProviderModelService
 from app.services.api_key import ApiKeyService, InvalidApiKeyError
 from app.services.llm_gateway import LLMGatewayService
+from app.services.usage import UsageService
 
 from fastapi.security import APIKeyHeader
 
@@ -374,3 +375,10 @@ async def require_execution_member(
             detail="Not enough permissions. Requires member role."
         )
     return execution_log
+
+
+def get_usage_service(
+    execution_log_repo: ExecutionLogRepository = Depends(get_execution_log_repository),
+) -> UsageService:
+    """Provide a UsageService instance."""
+    return UsageService(execution_log_repo)
