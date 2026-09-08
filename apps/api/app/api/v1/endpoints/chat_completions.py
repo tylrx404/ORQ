@@ -2,10 +2,16 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse, JSONResponse
 
-from app.api.dependencies import get_current_api_key, get_llm_gateway_service, get_rate_limit_service
+from app.api.dependencies import (
+    get_current_api_key,
+    get_llm_gateway_service,
+    get_organization_quota_service,
+    get_rate_limit_service,
+)
 from app.core.config import settings
 from app.models.api_key import ApiKey
 from app.schemas.chat_completion import ChatCompletionRequest
+from app.services.organization_quota import OrganizationQuotaService
 from app.services.rate_limit import RateLimitService
 from app.services.llm_gateway import (
     LLMGatewayError,
@@ -27,6 +33,7 @@ async def create_chat_completion(
     current_api_key: ApiKey = Depends(get_current_api_key),
     llm_gateway_service: LLMGatewayService = Depends(get_llm_gateway_service),
     rate_limit_service: RateLimitService = Depends(get_rate_limit_service),
+    quota_service: OrganizationQuotaService = Depends(get_organization_quota_service),
 ) -> Any:
     """
     OpenAI-compatible chat completion proxy endpoint authenticated via X-API-Key.
@@ -45,6 +52,22 @@ async def create_chat_completion(
 
     if not allowed:
         return JSONResponse(status_code=429, content=error_body, headers=headers)
+
+    quota_allowed = await quota_service.check_and_increment_request_quota(
+        organization_id=current_api_key.organization_id
+    )
+    if not quota_allowed:
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": {
+                    "message": "You have exceeded your organization's monthly usage quota. Please check your plan details.",
+                    "type": "insufficient_quota",
+                    "code": 429,
+                }
+            },
+            headers=headers,
+        )
 
     try:
         if request.stream:
