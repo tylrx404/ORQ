@@ -37,6 +37,8 @@ from app.services.api_key import ApiKeyService, InvalidApiKeyError
 from app.services.llm_gateway import LLMGatewayService
 from app.services.usage import UsageService
 from app.services.rate_limit import RateLimitService
+from app.services.organization_quota import OrganizationQuotaService
+from app.repositories.organization_quota_repository import OrganizationQuotaRepository
 from app.redis.client import redis_manager
 
 from fastapi.security import APIKeyHeader
@@ -389,3 +391,17 @@ def get_usage_service(
 def get_rate_limit_service() -> RateLimitService:
     """Provide a RateLimitService instance."""
     return RateLimitService(redis_manager.get_client())
+
+
+def get_organization_quota_repository(
+    db: AsyncSession = Depends(get_db),
+) -> OrganizationQuotaRepository:
+    """Provide an OrganizationQuotaRepository instance."""
+    return OrganizationQuotaRepository(db)
+
+
+def get_organization_quota_service(
+    repo: OrganizationQuotaRepository = Depends(get_organization_quota_repository),
+) -> OrganizationQuotaService:
+    """Provide an OrganizationQuotaService instance."""
+    return OrganizationQuotaService(repo)

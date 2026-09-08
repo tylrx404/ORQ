@@ -13,6 +13,7 @@ from app.api.v1.endpoints import (
     organization_memberships,
     organization_provider_models,
     organization_providers,
+    organization_quota,
     organization_usage,
     organizations,
     provider_models,
@@ -70,6 +71,11 @@ api_router.include_router(
     organization_usage.router,
     prefix="/organizations/{organization_id}",
     tags=["organization usage"],
+)
+api_router.include_router(
+    organization_quota.router,
+    prefix="/organizations/{organization_id}",
+    tags=["organization quota"],
 )
 api_router.include_router(
     api_keys.router, prefix="/api-keys", tags=["api keys"]

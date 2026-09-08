@@ -16,5 +16,6 @@ from app.models.provider import Provider
 from app.models.provider_model import ProviderModel
 from app.models.api_key import ApiKey
 from app.models.execution_log import ExecutionLog
+from app.models.organization_quota import OrganizationQuota
 
-__all__ = ["User", "Organization", "OrganizationMembership", "OrganizationInvitation", "Provider", "ProviderModel", "ApiKey", "ExecutionLog"]
+__all__ = ["User", "Organization", "OrganizationMembership", "OrganizationInvitation", "Provider", "ProviderModel", "ApiKey", "ExecutionLog", "OrganizationQuota"]
