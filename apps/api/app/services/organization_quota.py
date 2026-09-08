@@ -141,6 +141,10 @@ class OrganizationQuotaService:
             cycle_days=_DEFAULT_CYCLE_DAYS,
         )
 
+    async def rollback_request_quota(self, organization_id: UUID) -> None:
+        """Rollback 1 request counter when LLM execution fails before successful completion."""
+        await self._repo.decrement_request(organization_id)
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

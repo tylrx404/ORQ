@@ -118,17 +118,23 @@ async def create_chat_completion(
 
         return JSONResponse(content=response_data, headers=headers)
     except (ModelNotFoundError, ProviderNotFoundError) as e:
+        await quota_service.rollback_request_quota(current_api_key.organization_id)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
     except ProviderExecutionError as e:
+        await quota_service.rollback_request_quota(current_api_key.organization_id)
         raise HTTPException(
             status_code=e.status_code,
             detail=e.message,
         )
     except LLMGatewayError as e:
+        await quota_service.rollback_request_quota(current_api_key.organization_id)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
+    except Exception as e:
+        await quota_service.rollback_request_quota(current_api_key.organization_id)
+        raise e
