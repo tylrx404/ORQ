@@ -2,7 +2,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.dependencies import get_organization_quota_service, require_admin
+from app.api.dependencies import (
+    get_organization_quota_service,
+    require_admin,
+    require_member,
+)
 from app.schemas.organization_quota import (
     OrganizationQuotaCreate,
     OrganizationQuotaResponse,
@@ -20,7 +24,7 @@ router = APIRouter()
 @router.get(
     "/quota",
     response_model=OrganizationQuotaResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_member)],
 )
 async def get_quota(
     organization_id: UUID,

@@ -12,7 +12,11 @@ from uuid import uuid4
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.api.dependencies import get_organization_quota_service, require_admin
+from app.api.dependencies import (
+    get_organization_quota_service,
+    require_admin,
+    require_member,
+)
 from app.main import app
 from app.models.organization_quota import OrganizationQuota
 from app.services.organization_quota import (
@@ -63,16 +67,18 @@ def org_id():
 
 @pytest.fixture
 def quota_setup(org_id):
-    """Fixture that wires a mock OrganizationQuotaService and bypasses require_admin."""
+    """Fixture that wires a mock OrganizationQuotaService and bypasses auth."""
     mock_service = AsyncMock(spec=OrganizationQuotaService)
 
     app.dependency_overrides[get_organization_quota_service] = lambda: mock_service
     app.dependency_overrides[require_admin] = lambda: None
+    app.dependency_overrides[require_member] = lambda: None
 
     yield {"org_id": org_id, "service": mock_service}
 
     app.dependency_overrides.pop(get_organization_quota_service, None)
     app.dependency_overrides.pop(require_admin, None)
+    app.dependency_overrides.pop(require_member, None)
 
 
 # ---------------------------------------------------------------------------

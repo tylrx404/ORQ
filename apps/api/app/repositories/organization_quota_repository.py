@@ -135,6 +135,18 @@ class OrganizationQuotaRepository:
         await self.db.commit()
         return True
 
+    async def decrement_request(self, organization_id: UUID) -> None:
+        """Rollback 1 request count (e.g. when LLM call fails before successful completion)."""
+        await self.db.execute(
+            update(OrganizationQuota)
+            .where(
+                OrganizationQuota.organization_id == organization_id,
+                OrganizationQuota.requests_used > 0,
+            )
+            .values(requests_used=OrganizationQuota.requests_used - 1)
+        )
+        await self.db.commit()
+
     async def increment_usage(
         self,
         organization_id: UUID,

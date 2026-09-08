@@ -31,6 +31,9 @@ def mock_quota_limiter():
 
         async def check_and_increment_token_quota(self, *args, **kwargs):
             return True
+
+        async def rollback_request_quota(self, *args, **kwargs):
+            pass
     app.dependency_overrides[get_organization_quota_service] = lambda: MockQuotaService()
     yield
     if get_organization_quota_service in app.dependency_overrides:

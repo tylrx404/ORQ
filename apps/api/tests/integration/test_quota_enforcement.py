@@ -83,6 +83,12 @@ class InMemoryQuotaRepo:
             self.quota.tokens_used += tokens
             return True
 
+    async def decrement_request(self, organization_id) -> None:
+        async with self.lock:
+            if self.quota is not None and self.quota.requests_used > 0:
+                self.quota.requests_used -= 1
+
+
 
 @pytest.fixture
 def quota_enforcement_setup():
@@ -522,3 +528,155 @@ async def test_token_quota_reset_expired_billing_cycle(quota_enforcement_setup):
     # tokens_used was reset to 0 in cycle reset, then 150 added
     assert quota.tokens_used == 150
     assert quota.reset_at > datetime.now(timezone.utc)
+
+
+# ===========================================================================
+# Step 4: Quota Hardening, Observability & Error Rollback Tests
+# ===========================================================================
+
+@pytest.mark.asyncio
+async def test_quota_usage_endpoint_success():
+    """GET /v1/organizations/{organization_id}/quota returns full quota info for members."""
+    org_id = uuid4()
+    reset_date = _future(15)
+    now = datetime.now(timezone.utc)
+    quota = OrganizationQuota(
+        id=uuid4(),
+        organization_id=org_id,
+        request_limit=500,
+        token_limit=100000,
+        requests_used=42,
+        tokens_used=12345,
+        reset_at=reset_date,
+    )
+    quota.created_at = now
+    quota.updated_at = now
+    repo = InMemoryQuotaRepo(quota)
+    service = OrganizationQuotaService(repo)
+
+    from app.api.dependencies import require_member
+    app.dependency_overrides[get_organization_quota_service] = lambda: service
+    app.dependency_overrides[require_member] = lambda: None
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.get(f"/api/v1/organizations/{org_id}/quota")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["organization_id"] == str(org_id)
+        assert data["request_limit"] == 500
+        assert data["token_limit"] == 100000
+        assert data["requests_used"] == 42
+        assert data["tokens_used"] == 12345
+        assert "reset_at" in data
+    finally:
+        app.dependency_overrides.pop(get_organization_quota_service, None)
+        app.dependency_overrides.pop(require_member, None)
+
+
+@pytest.mark.asyncio
+async def test_quota_usage_endpoint_access_control():
+    """GET /v1/organizations/{organization_id}/quota enforces organization membership."""
+    org_id = uuid4()
+    from app.api.dependencies import require_member
+    from fastapi import HTTPException
+
+    def raise_forbidden():
+        raise HTTPException(status_code=403, detail="Not enough permissions. Requires member role.")
+
+    app.dependency_overrides[require_member] = raise_forbidden
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.get(f"/api/v1/organizations/{org_id}/quota")
+
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "Not enough permissions. Requires member role."
+    finally:
+        app.dependency_overrides.pop(require_member, None)
+
+
+@pytest.mark.asyncio
+async def test_failed_llm_request_does_not_consume_quota(quota_enforcement_setup):
+    """When the LLM provider fails (e.g. 502/ProviderExecutionError), request quota is rolled back."""
+    org_id = quota_enforcement_setup["org_id"]
+    now = datetime.now(timezone.utc)
+    quota = OrganizationQuota(
+        id=uuid4(),
+        organization_id=org_id,
+        request_limit=10,
+        token_limit=1000,
+        requests_used=5,
+        tokens_used=200,
+        reset_at=_future(),
+    )
+    quota.created_at = now
+    quota.updated_at = now
+    repo = InMemoryQuotaRepo(quota)
+    service = OrganizationQuotaService(repo)
+    app.dependency_overrides[get_organization_quota_service] = lambda: service
+
+    from app.services.llm_gateway import ProviderExecutionError
+
+    class FailingGateway:
+        async def execute_chat_completion(self, *args, **kwargs):
+            raise ProviderExecutionError(502, "Upstream provider offline")
+
+    app.dependency_overrides[get_llm_gateway_service] = lambda: FailingGateway()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        resp = await ac.post(
+            "/api/v1/chat/completions",
+            json={"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]},
+        )
+
+    assert resp.status_code == 502
+    # Quota counters should not be consumed: requests_used should stay 5 and tokens_used 200
+    assert quota.requests_used == 5
+    assert quota.tokens_used == 200
+
+
+@pytest.mark.asyncio
+async def test_successful_request_and_token_usage_reporting(quota_enforcement_setup):
+    """Successful completion increments both requests_used and tokens_used, visible in quota response."""
+    org_id = quota_enforcement_setup["org_id"]
+    now = datetime.now(timezone.utc)
+    quota = OrganizationQuota(
+        id=uuid4(),
+        organization_id=org_id,
+        request_limit=10,
+        token_limit=1000,
+        requests_used=2,
+        tokens_used=100,
+        reset_at=_future(),
+    )
+    quota.created_at = now
+    quota.updated_at = now
+    repo = InMemoryQuotaRepo(quota)
+    service = OrganizationQuotaService(repo)
+    app.dependency_overrides[get_organization_quota_service] = lambda: service
+    app.dependency_overrides[get_llm_gateway_service] = lambda: _make_gateway_with_tokens(45)
+
+    # 1. Send completion request
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        resp = await ac.post(
+            "/api/v1/chat/completions",
+            json={"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]},
+        )
+    assert resp.status_code == 200
+    assert quota.requests_used == 3
+    assert quota.tokens_used == 145
+
+    # 2. Query quota usage endpoint to verify reporting
+    from app.api.dependencies import require_member
+    app.dependency_overrides[require_member] = lambda: None
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            quota_resp = await ac.get(f"/api/v1/organizations/{org_id}/quota")
+        assert quota_resp.status_code == 200
+        data = quota_resp.json()
+        assert data["requests_used"] == 3
+        assert data["tokens_used"] == 145
+    finally:
+        app.dependency_overrides.pop(require_member, None)
