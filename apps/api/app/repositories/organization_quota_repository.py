@@ -85,6 +85,56 @@ class OrganizationQuotaRepository:
         await self.db.commit()
         return True
 
+    async def try_increment_tokens(
+        self,
+        organization_id: UUID,
+        tokens: int,
+        cycle_days: int = 30,
+    ) -> bool:
+        """Atomically check token quota and increment by `tokens` if allowed.
+
+        Uses SELECT ... FOR UPDATE to lock the organization's quota row, ensuring
+        concurrent requests cannot bypass the token limit.
+        If the billing cycle has expired (now >= reset_at), counters are reset
+        and reset_at is advanced before checking limits.
+
+        Returns True if tokens are allowed and incremented (or no quota/unlimited),
+        False if adding the tokens would exceed token_limit (quota remains unchanged).
+        """
+        if tokens <= 0:
+            return True
+
+        result = await self.db.execute(
+            select(OrganizationQuota)
+            .where(OrganizationQuota.organization_id == organization_id)
+            .with_for_update()
+        )
+        quota = result.scalar_one_or_none()
+        if quota is None:
+            # No quota configured means unlimited
+            return True
+
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(timezone.utc)
+        reset_at = quota.reset_at
+        if reset_at.tzinfo is None:
+            reset_at = reset_at.replace(tzinfo=timezone.utc)
+
+        if now >= reset_at:
+            while now >= reset_at:
+                reset_at = reset_at + timedelta(days=cycle_days)
+            quota.reset_at = reset_at
+            quota.requests_used = 0
+            quota.tokens_used = 0
+
+        if quota.token_limit is not None and (quota.tokens_used + tokens) > quota.token_limit:
+            await self.db.commit()
+            return False
+
+        quota.tokens_used = OrganizationQuota.tokens_used + tokens
+        await self.db.commit()
+        return True
+
     async def increment_usage(
         self,
         organization_id: UUID,

@@ -91,6 +91,31 @@ async def create_chat_completion(
             max_tokens=request.max_tokens,
             stream=False,
         )
+
+        total_tokens = 0
+        if isinstance(response_data, dict):
+            usage = response_data.get("usage")
+            if isinstance(usage, dict):
+                total_tokens = usage.get("total_tokens") or 0
+
+        if total_tokens > 0:
+            token_quota_allowed = await quota_service.check_and_increment_token_quota(
+                organization_id=current_api_key.organization_id,
+                tokens=total_tokens,
+            )
+            if not token_quota_allowed:
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "error": {
+                            "message": "You have exceeded your organization's monthly usage quota. Please check your plan details.",
+                            "type": "insufficient_quota",
+                            "code": 429,
+                        }
+                    },
+                    headers=headers,
+                )
+
         return JSONResponse(content=response_data, headers=headers)
     except (ModelNotFoundError, ProviderNotFoundError) as e:
         raise HTTPException(
