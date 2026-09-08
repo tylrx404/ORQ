@@ -128,6 +128,19 @@ class OrganizationQuotaService:
             cycle_days=_DEFAULT_CYCLE_DAYS,
         )
 
+    async def check_and_increment_token_quota(
+        self, organization_id: UUID, tokens: int
+    ) -> bool:
+        """Atomically check if adding `tokens` is within organization token quota and increment.
+
+        Returns True if allowed (or unlimited/no quota configured), False if quota exceeded.
+        """
+        return await self._repo.try_increment_tokens(
+            organization_id=organization_id,
+            tokens=tokens,
+            cycle_days=_DEFAULT_CYCLE_DAYS,
+        )
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
