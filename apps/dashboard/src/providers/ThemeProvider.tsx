@@ -1,8 +1,5 @@
-import React, { createContext, useContext, useEffect } from "react"
-
-type Theme = "dark"
-
-const ThemeContext = createContext<{ theme: Theme }>({ theme: "dark" })
+import React, { useEffect } from "react"
+import { ThemeContext } from "./useTheme"
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -16,5 +13,3 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     </ThemeContext.Provider>
   )
 }
-
-export const useTheme = () => useContext(ThemeContext)

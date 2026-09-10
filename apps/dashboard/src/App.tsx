@@ -1,27 +1,187 @@
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { GlobalLayout } from "./layouts/GlobalLayout"
-import { GlassCard } from "./components/ui/glass-card"
-import { Cpu } from "lucide-react"
+import { PlaceholderPage } from "./pages/PlaceholderPage"
 
 export default function App() {
   return (
-    <GlobalLayout>
-      <div className="h-full flex items-center justify-center min-h-[500px]">
-        <GlassCard className="max-w-md w-full p-12 text-center shadow-2xl relative overflow-hidden group border-white/10 bg-zinc-950/50 backdrop-blur-2xl">
-          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-zinc-900/50 flex items-center justify-center mb-8 border border-white/5 shadow-inner group-hover:border-cyan-500/30 group-hover:shadow-[0_0_30px_rgba(6,182,212,0.2)] transition-all duration-500">
-            <Cpu className="w-8 h-8 text-cyan-400" />
-          </div>
-          <h1 className="text-4xl font-extrabold tracking-tight mb-2 text-white">
-            ORQ
-          </h1>
-          <h2 className="text-xl font-medium text-zinc-300 mb-4 tracking-wide">
-            AI Agent Control Plane
-          </h2>
-          <p className="text-sm tracking-widest text-cyan-500/80 uppercase font-bold">
-            Engineering Foundation
-          </p>
-        </GlassCard>
-      </div>
-    </GlobalLayout>
+    <BrowserRouter>
+      <GlobalLayout>
+        <Routes>
+          {/* 1. Overview */}
+          <Route
+            path="/"
+            element={
+              <PlaceholderPage
+                eyebrow="Core"
+                title="Overview"
+                description="High-level telemetry, active providers, and platform throughput overview for the ORQ control plane."
+                endpointHint="GET /api/v1/ready • GET /api/v1/organizations/{id}/usage"
+                features={[
+                  "System health monitoring",
+                  "Execution volume summary",
+                  "Active provider topology",
+                  "Token quota consumption",
+                ]}
+              />
+            }
+          />
+
+          {/* 2. Playground */}
+          <Route
+            path="/playground"
+            element={
+              <PlaceholderPage
+                eyebrow="Core"
+                title="Playground"
+                description="Interactive test environment for experimenting with resolved models, system prompts, and streaming chat completions."
+                endpointHint="POST /api/v1/chat/completions (SSE streaming supported)"
+                features={[
+                  "Real-time streaming generation",
+                  "Model parameter tuning",
+                  "Token count calculation",
+                  "Latency metrics inspector",
+                ]}
+              />
+            }
+          />
+
+          {/* 3. Models */}
+          <Route
+            path="/models"
+            element={
+              <PlaceholderPage
+                eyebrow="Infrastructure"
+                title="Models"
+                description="Configure, catalog, and map models available to your organizations with designated aliases and routing parameters."
+                endpointHint="GET /api/v1/organizations/{id}/providers/{pid}/models"
+                features={[
+                  "Model registry and routing",
+                  "Context window limits",
+                  "Default model designation",
+                  "Provider association",
+                ]}
+              />
+            }
+          />
+
+          {/* 4. Providers */}
+          <Route
+            path="/providers"
+            element={
+              <PlaceholderPage
+                eyebrow="Infrastructure"
+                title="Providers"
+                description="Manage upstream LLM provider credentials, custom base URLs, and active routing status."
+                endpointHint="GET /api/v1/organizations/{id}/providers"
+                features={[
+                  "Encrypted API key storage",
+                  "Custom OpenAI-compatible base URLs",
+                  "Active/inactive toggle",
+                  "Provider failover health",
+                ]}
+              />
+            }
+          />
+
+          {/* 5. API Keys */}
+          <Route
+            path="/api-keys"
+            element={
+              <PlaceholderPage
+                eyebrow="Infrastructure"
+                title="API Keys"
+                description="Issue, inspect, and revoke machine-to-machine API keys for client integrations and gateway access."
+                endpointHint="GET /api/v1/organizations/{id}/api-keys"
+                features={[
+                  "High-entropy SHA-256 key hashing",
+                  "One-time display raw secret generation",
+                  "Immediate revocation controls",
+                  "Expiration policies",
+                ]}
+              />
+            }
+          />
+
+          {/* 6. Executions */}
+          <Route
+            path="/executions"
+            element={
+              <PlaceholderPage
+                eyebrow="Observability"
+                title="Executions"
+                description="Detailed audit logs of every gateway LLM execution, including status codes, token breakdown, and response latency."
+                endpointHint="GET /api/v1/organizations/{id}/executions"
+                features={[
+                  "Status code filtering (200, 429, 502)",
+                  "Token usage audit (prompt & completion)",
+                  "Latency tracing (milliseconds)",
+                  "Failure error message inspection",
+                ]}
+              />
+            }
+          />
+
+          {/* 7. Usage */}
+          <Route
+            path="/usage"
+            element={
+              <PlaceholderPage
+                eyebrow="Observability"
+                title="Usage Analytics"
+                description="Aggregated usage metrics across time intervals, breakdown by model identifier, and overall request volume."
+                endpointHint="GET /api/v1/organizations/{id}/usage"
+                features={[
+                  "Time-bucketed request metrics",
+                  "Cumulative token consumption",
+                  "Success vs. error distribution",
+                  "Per-model utilization breakdown",
+                ]}
+              />
+            }
+          />
+
+          {/* 8. Quotas */}
+          <Route
+            path="/quotas"
+            element={
+              <PlaceholderPage
+                eyebrow="Observability"
+                title="Quotas & Limits"
+                description="Manage organizational monthly request limits, token consumption budgets, and automatic billing cycle resets."
+                endpointHint="GET /api/v1/organizations/{id}/quota"
+                features={[
+                  "Monthly request ceiling enforcement",
+                  "Monthly token consumption ceiling",
+                  "Atomic PostgreSQL quota incrementation",
+                  "Transactional failure rollback verification",
+                ]}
+              />
+            }
+          />
+
+          {/* 9. Settings */}
+          <Route
+            path="/settings"
+            element={
+              <PlaceholderPage
+                eyebrow="System"
+                title="Settings"
+                description="Configure organization metadata, team member access roles, and platform notifications."
+                endpointHint="GET /api/v1/organizations/{id}"
+                features={[
+                  "Organization slug and name management",
+                  "Role-based access control (Admin / Member)",
+                  "Invitation link generator",
+                  "System connection diagnostics",
+                ]}
+              />
+            }
+          />
+
+          {/* Catch-all fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </GlobalLayout>
+    </BrowserRouter>
   )
 }
