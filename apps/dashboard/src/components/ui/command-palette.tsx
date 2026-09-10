@@ -15,15 +15,15 @@ interface CommandItem {
 }
 
 const COMMAND_ITEMS: CommandItem[] = [
-  { name: "Overview", path: "/", category: "Core" },
-  { name: "Playground", path: "/playground", category: "Core" },
-  { name: "Models", path: "/models", category: "Infrastructure" },
-  { name: "Providers", path: "/providers", category: "Infrastructure" },
-  { name: "API Keys", path: "/api-keys", category: "Infrastructure" },
-  { name: "Executions", path: "/executions", category: "Observability" },
-  { name: "Usage Analytics", path: "/usage", category: "Observability" },
-  { name: "Quotas", path: "/quotas", category: "Observability" },
-  { name: "Organization Settings", path: "/settings", category: "System" },
+  { name: "Overview", path: "/app", category: "Core" },
+  { name: "Playground", path: "/app/playground", category: "Core" },
+  { name: "Models", path: "/app/models", category: "Infrastructure" },
+  { name: "Providers", path: "/app/providers", category: "Infrastructure" },
+  { name: "API Keys", path: "/app/api-keys", category: "Infrastructure" },
+  { name: "Executions", path: "/app/executions", category: "Observability" },
+  { name: "Usage Analytics", path: "/app/usage", category: "Observability" },
+  { name: "Quotas", path: "/app/quotas", category: "Observability" },
+  { name: "Organization Settings", path: "/app/settings", category: "System" },
 ]
 
 export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
@@ -43,48 +43,52 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const handleSelect = (path: string) => {
     navigate(path)
     onClose()
-    setQuery("")
   }
 
-  return (
-    <Dialog isOpen={isOpen} onClose={onClose} maxWidth="lg">
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-3 border-b border-border pb-3 px-1">
-          <Search className="h-4 w-4 text-muted-foreground shrink-0" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none font-sans"
-            placeholder="Search navigation or commands..."
-            autoFocus
-          />
-          <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-2 border border-border text-muted-foreground">
-            ESC
-          </kbd>
-        </div>
+  // Reset search when dialog opens/closes
+  React.useEffect(() => {
+    if (!isOpen) setQuery("")
+  }, [isOpen])
 
-        <div className="max-h-72 overflow-y-auto space-y-1 custom-scrollbar py-1">
-          {filtered.length === 0 ? (
-            <div className="py-8 text-center text-xs text-muted-foreground font-mono">
-              No matching commands or navigation paths found.
-            </div>
-          ) : (
-            filtered.map((item) => (
-              <button
-                key={item.path}
-                onClick={() => handleSelect(item.path)}
-                className="w-full flex items-center justify-between px-3 py-2 rounded text-xs text-left hover:bg-surface-2 transition-colors group cursor-pointer"
-              >
-                <span className="font-medium text-foreground group-hover:text-primary transition-colors">
-                  {item.name}
-                </span>
-                <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
-                  {item.category}
-                </span>
-              </button>
-            ))
-          )}
-        </div>
+  return (
+    <Dialog isOpen={isOpen} onClose={onClose} maxWidth="lg" className="overflow-hidden" contentClassName="p-0">
+      {/* Search Bar Input */}
+      <div className="flex items-center px-4 border-b border-border/80 bg-surface-1">
+        <Search className="h-4 w-4 text-muted-foreground shrink-0 mr-3" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Type a command or search sections..."
+          className="w-full py-3.5 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none font-sans"
+          autoFocus
+        />
+        <kbd className="hidden sm:inline-block text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-2 border border-border-strong text-muted-foreground select-none">
+          ESC
+        </kbd>
+      </div>
+
+      {/* Results List */}
+      <div className="max-h-80 overflow-y-auto custom-scrollbar p-2 space-y-1">
+        {filtered.length === 0 ? (
+          <div className="py-8 text-center text-xs text-muted-foreground font-mono">
+            No matching navigation items found.
+          </div>
+        ) : (
+          filtered.map((item) => (
+            <button
+              key={item.path}
+              onClick={() => handleSelect(item.path)}
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-md hover:bg-surface-2 text-left transition-colors cursor-pointer group select-none"
+            >
+              <span className="text-xs font-medium text-foreground group-hover:text-primary transition-colors">
+                {item.name}
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-surface-1 border border-border text-muted-foreground">
+                {item.category}
+              </span>
+            </button>
+          ))
+        )}
       </div>
     </Dialog>
   )

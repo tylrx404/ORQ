@@ -1,5 +1,5 @@
 import * as React from "react"
-import { NavLink } from "react-router-dom"
+import { NavLink, Link } from "react-router-dom"
 import {
   LayoutDashboard,
   Terminal,
@@ -30,29 +30,29 @@ const NAVIGATION_GROUPS: NavGroupConfig[] = [
   {
     title: "Core",
     items: [
-      { name: "Overview", to: "/", icon: LayoutDashboard },
-      { name: "Playground", to: "/playground", icon: Terminal },
+      { name: "Overview", to: "/app", icon: LayoutDashboard },
+      { name: "Playground", to: "/app/playground", icon: Terminal },
     ],
   },
   {
     title: "Infrastructure",
     items: [
-      { name: "Models", to: "/models", icon: Cpu },
-      { name: "Providers", to: "/providers", icon: Server },
-      { name: "API Keys", to: "/api-keys", icon: Key },
+      { name: "Models", to: "/app/models", icon: Cpu },
+      { name: "Providers", to: "/app/providers", icon: Server },
+      { name: "API Keys", to: "/app/api-keys", icon: Key },
     ],
   },
   {
     title: "Observability",
     items: [
-      { name: "Executions", to: "/executions", icon: ListTree },
-      { name: "Usage", to: "/usage", icon: BarChart3 },
-      { name: "Quotas", to: "/quotas", icon: Gauge },
+      { name: "Executions", to: "/app/executions", icon: ListTree },
+      { name: "Usage", to: "/app/usage", icon: BarChart3 },
+      { name: "Quotas", to: "/app/quotas", icon: Gauge },
     ],
   },
   {
     title: "System",
-    items: [{ name: "Settings", to: "/settings", icon: Settings }],
+    items: [{ name: "Settings", to: "/app/settings", icon: Settings }],
   },
 ]
 
@@ -82,8 +82,8 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       >
         {/* Brand Header */}
         <div className="h-14 flex items-center justify-between px-5 border-b border-border/60">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded bg-primary/10 border border-primary/30 text-primary">
+          <Link to="/" className="flex items-center gap-2.5 group">
+            <div className="flex h-7 w-7 items-center justify-center rounded bg-primary/10 border border-primary/30 text-primary group-hover:border-primary/60 transition-colors">
               <Layers className="h-4 w-4" />
             </div>
             <div className="flex flex-col">
@@ -99,7 +99,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                 Control Plane
               </span>
             </div>
-          </div>
+          </Link>
 
           {onClose && (
             <button
@@ -127,7 +127,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                       key={item.to}
                       to={item.to}
                       onClick={onClose}
-                      end={item.to === "/"}
+                      end={item.to === "/app"}
                       className={({ isActive }) =>
                         cn(
                           "relative flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium transition-colors select-none group",

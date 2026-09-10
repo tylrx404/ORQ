@@ -11,22 +11,22 @@ import {
 import { motion, AnimatePresence } from "framer-motion"
 import { CommandPalette } from "../ui/command-palette"
 import { showToast } from "../ui/toast-fn"
-import { useLocation } from "react-router-dom"
+import { useLocation, Link } from "react-router-dom"
 
 export interface TopNavProps {
   onOpenMobileMenu?: () => void
 }
 
 const ROUTE_NAMES: Record<string, string> = {
-  "/": "Overview",
-  "/playground": "Playground",
-  "/models": "Models",
-  "/providers": "Providers",
-  "/api-keys": "API Keys",
-  "/executions": "Executions",
-  "/usage": "Usage Analytics",
-  "/quotas": "Quotas & Limits",
-  "/settings": "Settings",
+  "/app": "Overview",
+  "/app/playground": "Playground",
+  "/app/models": "Models",
+  "/app/providers": "Providers",
+  "/app/api-keys": "API Keys",
+  "/app/executions": "Executions",
+  "/app/usage": "Usage Analytics",
+  "/app/quotas": "Quotas & Limits",
+  "/app/settings": "Settings",
 }
 
 export function TopNav({ onOpenMobileMenu }: TopNavProps) {
@@ -64,7 +64,9 @@ export function TopNav({ onOpenMobileMenu }: TopNavProps) {
           )}
 
           <div className="flex items-center gap-2 text-xs font-mono">
-            <span className="text-muted-foreground hidden sm:inline">ORQ</span>
+            <Link to="/" className="text-muted-foreground hover:text-foreground transition-colors hidden sm:inline">
+              ORQ
+            </Link>
             <span className="text-border-strong hidden sm:inline">/</span>
             <span className="text-foreground font-medium font-sans text-sm">
               {currentRouteName}

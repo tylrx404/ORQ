@@ -1,16 +1,24 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { GlobalLayout } from "./layouts/GlobalLayout"
+import { LandingPage } from "./pages/LandingPage"
 import { PlaceholderPage } from "./pages/PlaceholderPage"
 
 export default function App() {
   return (
     <BrowserRouter>
-      <GlobalLayout>
-        <Routes>
-          {/* 1. Overview */}
-          <Route
-            path="/"
-            element={
+      <Routes>
+        {/* ================================================================= */}
+        {/* PUBLIC EXPERIENCE: Editorial High-End Landing Page                 */}
+        {/* ================================================================= */}
+        <Route path="/" element={<LandingPage />} />
+
+        {/* ================================================================= */}
+        {/* AUTHENTICATED CONTROL PLANE: Shell & Domain Foundations          */}
+        {/* ================================================================= */}
+        <Route
+          path="/app"
+          element={
+            <GlobalLayout>
               <PlaceholderPage
                 eyebrow="Core"
                 title="Overview"
@@ -23,13 +31,14 @@ export default function App() {
                   "Token quota consumption",
                 ]}
               />
-            }
-          />
+            </GlobalLayout>
+          }
+        />
 
-          {/* 2. Playground */}
-          <Route
-            path="/playground"
-            element={
+        <Route
+          path="/app/playground"
+          element={
+            <GlobalLayout>
               <PlaceholderPage
                 eyebrow="Core"
                 title="Playground"
@@ -42,13 +51,14 @@ export default function App() {
                   "Latency metrics inspector",
                 ]}
               />
-            }
-          />
+            </GlobalLayout>
+          }
+        />
 
-          {/* 3. Models */}
-          <Route
-            path="/models"
-            element={
+        <Route
+          path="/app/models"
+          element={
+            <GlobalLayout>
               <PlaceholderPage
                 eyebrow="Infrastructure"
                 title="Models"
@@ -61,13 +71,14 @@ export default function App() {
                   "Provider association",
                 ]}
               />
-            }
-          />
+            </GlobalLayout>
+          }
+        />
 
-          {/* 4. Providers */}
-          <Route
-            path="/providers"
-            element={
+        <Route
+          path="/app/providers"
+          element={
+            <GlobalLayout>
               <PlaceholderPage
                 eyebrow="Infrastructure"
                 title="Providers"
@@ -80,13 +91,14 @@ export default function App() {
                   "Provider failover health",
                 ]}
               />
-            }
-          />
+            </GlobalLayout>
+          }
+        />
 
-          {/* 5. API Keys */}
-          <Route
-            path="/api-keys"
-            element={
+        <Route
+          path="/app/api-keys"
+          element={
+            <GlobalLayout>
               <PlaceholderPage
                 eyebrow="Infrastructure"
                 title="API Keys"
@@ -99,13 +111,14 @@ export default function App() {
                   "Expiration policies",
                 ]}
               />
-            }
-          />
+            </GlobalLayout>
+          }
+        />
 
-          {/* 6. Executions */}
-          <Route
-            path="/executions"
-            element={
+        <Route
+          path="/app/executions"
+          element={
+            <GlobalLayout>
               <PlaceholderPage
                 eyebrow="Observability"
                 title="Executions"
@@ -118,13 +131,14 @@ export default function App() {
                   "Failure error message inspection",
                 ]}
               />
-            }
-          />
+            </GlobalLayout>
+          }
+        />
 
-          {/* 7. Usage */}
-          <Route
-            path="/usage"
-            element={
+        <Route
+          path="/app/usage"
+          element={
+            <GlobalLayout>
               <PlaceholderPage
                 eyebrow="Observability"
                 title="Usage Analytics"
@@ -137,13 +151,14 @@ export default function App() {
                   "Per-model utilization breakdown",
                 ]}
               />
-            }
-          />
+            </GlobalLayout>
+          }
+        />
 
-          {/* 8. Quotas */}
-          <Route
-            path="/quotas"
-            element={
+        <Route
+          path="/app/quotas"
+          element={
+            <GlobalLayout>
               <PlaceholderPage
                 eyebrow="Observability"
                 title="Quotas & Limits"
@@ -156,13 +171,14 @@ export default function App() {
                   "Transactional failure rollback verification",
                 ]}
               />
-            }
-          />
+            </GlobalLayout>
+          }
+        />
 
-          {/* 9. Settings */}
-          <Route
-            path="/settings"
-            element={
+        <Route
+          path="/app/settings"
+          element={
+            <GlobalLayout>
               <PlaceholderPage
                 eyebrow="System"
                 title="Settings"
@@ -175,13 +191,13 @@ export default function App() {
                   "System connection diagnostics",
                 ]}
               />
-            }
-          />
+            </GlobalLayout>
+          }
+        />
 
-          {/* Catch-all fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </GlobalLayout>
+        {/* Catch-all fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </BrowserRouter>
   )
 }

@@ -10,6 +10,8 @@ export interface DialogProps {
   description?: string
   children: React.ReactNode
   maxWidth?: "sm" | "md" | "lg" | "xl"
+  className?: string
+  contentClassName?: string
 }
 
 const maxWidthMap = {
@@ -26,6 +28,8 @@ export function Dialog({
   description,
   children,
   maxWidth = "md",
+  className,
+  contentClassName,
 }: DialogProps) {
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -57,7 +61,8 @@ export function Dialog({
             transition={{ duration: 0.15, ease: "easeOut" }}
             className={cn(
               "relative w-full rounded-lg surface-elevated text-foreground overflow-hidden z-10 shadow-2xl",
-              maxWidthMap[maxWidth]
+              maxWidthMap[maxWidth],
+              className
             )}
           >
             {(title || description) && (
@@ -84,7 +89,7 @@ export function Dialog({
               </div>
             )}
 
-            <div className="p-5">{children}</div>
+            <div className={cn("p-5", contentClassName)}>{children}</div>
           </motion.div>
         </div>
       )}
