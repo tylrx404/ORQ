@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { GlobalLayout } from "./layouts/GlobalLayout"
 import { LandingPage } from "./pages/LandingPage"
+import { OverviewPage } from "./pages/OverviewPage"
 import { PlaceholderPage } from "./pages/PlaceholderPage"
 
 export default function App() {
@@ -19,18 +20,7 @@ export default function App() {
           path="/app"
           element={
             <GlobalLayout>
-              <PlaceholderPage
-                eyebrow="Core"
-                title="Overview"
-                description="High-level telemetry, active providers, and platform throughput overview for the ORQ control plane."
-                endpointHint="GET /api/v1/ready • GET /api/v1/organizations/{id}/usage"
-                features={[
-                  "System health monitoring",
-                  "Execution volume summary",
-                  "Active provider topology",
-                  "Token quota consumption",
-                ]}
-              />
+              <OverviewPage />
             </GlobalLayout>
           }
         />
