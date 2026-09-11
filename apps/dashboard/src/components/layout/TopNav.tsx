@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { CommandPalette } from "../ui/command-palette"
 import { showToast } from "../ui/toast-fn"
 import { useLocation, Link } from "react-router-dom"
+import { OrgSelector } from "./OrgSelector"
 
 export interface TopNavProps {
   onOpenMobileMenu?: () => void
@@ -71,6 +72,10 @@ export function TopNav({ onOpenMobileMenu }: TopNavProps) {
             <span className="text-foreground font-medium font-sans text-sm">
               {currentRouteName}
             </span>
+          </div>
+
+          <div className="hidden sm:block pl-2 border-l border-border/60">
+            <OrgSelector />
           </div>
         </div>
 
