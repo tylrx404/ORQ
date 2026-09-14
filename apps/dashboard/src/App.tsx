@@ -3,6 +3,7 @@ import { GlobalLayout } from "./layouts/GlobalLayout"
 import { LandingPage } from "./pages/LandingPage"
 import { OverviewPage } from "./pages/OverviewPage"
 import { PlaygroundPage } from "./pages/PlaygroundPage"
+import { ProvidersPage } from "./pages/ProvidersPage"
 import { PlaceholderPage } from "./pages/PlaceholderPage"
 
 export default function App() {
@@ -59,18 +60,7 @@ export default function App() {
           path="/app/providers"
           element={
             <GlobalLayout>
-              <PlaceholderPage
-                eyebrow="Infrastructure"
-                title="Providers"
-                description="Manage upstream LLM provider credentials, custom base URLs, and active routing status."
-                endpointHint="GET /api/v1/organizations/{id}/providers"
-                features={[
-                  "Encrypted API key storage",
-                  "Custom OpenAI-compatible base URLs",
-                  "Active/inactive toggle",
-                  "Provider failover health",
-                ]}
-              />
+              <ProvidersPage />
             </GlobalLayout>
           }
         />

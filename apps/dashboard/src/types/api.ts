@@ -59,16 +59,43 @@ export interface ApiError {
   detail?: string
 }
 
+export type ProviderType =
+  | "openai"
+  | "anthropic"
+  | "gemini"
+  | "groq"
+  | "openrouter"
+  | "azure_openai"
+  | "ollama"
+  | "lmstudio"
+
 export interface ProviderResponse {
   id: string
   organization_id: string
   name: string
-  provider_type: string
+  provider_type: ProviderType | string
   base_url?: string | null
   default_model?: string | null
   is_active: boolean
   created_at: string
   updated_at: string
+}
+
+export interface ProviderCreateRequest {
+  name: string
+  provider_type: ProviderType | string
+  api_key: string
+  base_url?: string | null
+  default_model?: string | null
+}
+
+export interface ProviderUpdateRequest {
+  name?: string
+  provider_type?: ProviderType | string
+  api_key?: string
+  base_url?: string | null
+  default_model?: string | null
+  is_active?: boolean
 }
 
 export interface ProviderModelResponse {

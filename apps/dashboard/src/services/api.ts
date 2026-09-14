@@ -4,6 +4,8 @@ import type {
   OrganizationQuotaResponse,
   ExecutionLogResponse,
   ProviderResponse,
+  ProviderCreateRequest,
+  ProviderUpdateRequest,
   ProviderModelResponse,
   ApiKeyCreateRequest,
   ApiKeyCreateResponse,
@@ -127,6 +129,61 @@ export const api = {
     return fetchJson<ProviderResponse[]>(
       `${API_BASE_URL}/organizations/${organizationId}/providers?skip=${skip}&limit=${limit}`
     )
+  },
+
+  /**
+   * Create a provider in an organization.
+   */
+  async createProvider(organizationId: string, request: ProviderCreateRequest): Promise<ProviderResponse> {
+    return fetchJson<ProviderResponse>(
+      `${API_BASE_URL}/organizations/${organizationId}/providers`,
+      {
+        method: "POST",
+        body: JSON.stringify(request),
+      }
+    )
+  },
+
+  /**
+   * Update a provider by ID.
+   */
+  async updateProvider(providerId: string, request: ProviderUpdateRequest): Promise<ProviderResponse> {
+    return fetchJson<ProviderResponse>(
+      `${API_BASE_URL}/providers/${providerId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(request),
+      }
+    )
+  },
+
+  /**
+   * Delete a provider by ID.
+   */
+  async deleteProvider(providerId: string): Promise<void> {
+    const token = localStorage.getItem("orq_access_token")
+    const headers = new Headers()
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`)
+    }
+    const res = await fetch(`${API_BASE_URL}/providers/${providerId}`, {
+      method: "DELETE",
+      headers,
+    })
+    if (!res.ok) {
+      let errorDetail = `HTTP ${res.status}: ${res.statusText}`
+      try {
+        const data = await res.json()
+        if (data?.detail) {
+          errorDetail = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)
+        } else if (data?.message) {
+          errorDetail = data.message
+        }
+      } catch {
+        // Body was not JSON
+      }
+      throw new ApiClientError(res.status, errorDetail)
+    }
   },
 
   /**
