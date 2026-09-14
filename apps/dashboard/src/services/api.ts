@@ -3,6 +3,10 @@ import type {
   UsageSummaryResponse,
   OrganizationQuotaResponse,
   ExecutionLogResponse,
+  ProviderResponse,
+  ProviderModelResponse,
+  ApiKeyCreateRequest,
+  ApiKeyCreateResponse,
 } from "../types/api"
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api/v1"
@@ -56,8 +60,14 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   /**
+   * Get the current stored JWT auth token.
+   */
+  getAuthToken(): string | null {
+    return localStorage.getItem("orq_access_token")
+  },
+
+  /**
    * List all available organizations.
-   * Endpoint: GET /api/v1/organizations/
    */
   async listOrganizations(skip = 0, limit = 100): Promise<Organization[]> {
     return fetchJson<Organization[]>(
@@ -67,7 +77,6 @@ export const api = {
 
   /**
    * Get an organization by ID.
-   * Endpoint: GET /api/v1/organizations/{id}
    */
   async getOrganization(organizationId: string): Promise<Organization> {
     return fetchJson<Organization>(`${API_BASE_URL}/organizations/${organizationId}`)
@@ -75,7 +84,6 @@ export const api = {
 
   /**
    * Get aggregated usage statistics for an organization.
-   * Endpoint: GET /api/v1/organizations/{id}/usage
    */
   async getOrganizationUsage(
     organizationId: string,
@@ -92,7 +100,6 @@ export const api = {
 
   /**
    * Get quota record for an organization.
-   * Endpoint: GET /api/v1/organizations/{id}/quota
    */
   async getOrganizationQuota(organizationId: string): Promise<OrganizationQuotaResponse> {
     return fetchJson<OrganizationQuotaResponse>(
@@ -102,7 +109,6 @@ export const api = {
 
   /**
    * List execution logs for an organization.
-   * Endpoint: GET /api/v1/organizations/{id}/executions
    */
   async listOrganizationExecutions(
     organizationId: string,
@@ -111,6 +117,37 @@ export const api = {
   ): Promise<ExecutionLogResponse[]> {
     return fetchJson<ExecutionLogResponse[]>(
       `${API_BASE_URL}/organizations/${organizationId}/executions?skip=${skip}&limit=${limit}`
+    )
+  },
+
+  /**
+   * List providers for an organization.
+   */
+  async listProviders(organizationId: string, skip = 0, limit = 100): Promise<ProviderResponse[]> {
+    return fetchJson<ProviderResponse[]>(
+      `${API_BASE_URL}/organizations/${organizationId}/providers?skip=${skip}&limit=${limit}`
+    )
+  },
+
+  /**
+   * List models for a provider.
+   */
+  async listProviderModels(organizationId: string, providerId: string, skip = 0, limit = 100): Promise<ProviderModelResponse[]> {
+    return fetchJson<ProviderModelResponse[]>(
+      `${API_BASE_URL}/organizations/${organizationId}/providers/${providerId}/models?skip=${skip}&limit=${limit}`
+    )
+  },
+
+  /**
+   * Create an API key for the organization.
+   */
+  async createApiKey(organizationId: string, request: ApiKeyCreateRequest): Promise<ApiKeyCreateResponse> {
+    return fetchJson<ApiKeyCreateResponse>(
+      `${API_BASE_URL}/organizations/${organizationId}/api-keys`,
+      {
+        method: "POST",
+        body: JSON.stringify(request)
+      }
     )
   },
 }

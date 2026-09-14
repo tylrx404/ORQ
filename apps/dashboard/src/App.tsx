@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { GlobalLayout } from "./layouts/GlobalLayout"
 import { LandingPage } from "./pages/LandingPage"
 import { OverviewPage } from "./pages/OverviewPage"
+import { PlaygroundPage } from "./pages/PlaygroundPage"
 import { PlaceholderPage } from "./pages/PlaceholderPage"
 
 export default function App() {
@@ -29,18 +30,7 @@ export default function App() {
           path="/app/playground"
           element={
             <GlobalLayout>
-              <PlaceholderPage
-                eyebrow="Core"
-                title="Playground"
-                description="Interactive test environment for experimenting with resolved models, system prompts, and streaming chat completions."
-                endpointHint="POST /api/v1/chat/completions (SSE streaming supported)"
-                features={[
-                  "Real-time streaming generation",
-                  "Model parameter tuning",
-                  "Token count calculation",
-                  "Latency metrics inspector",
-                ]}
-              />
+              <PlaygroundPage />
             </GlobalLayout>
           }
         />
