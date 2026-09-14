@@ -58,3 +58,52 @@ export interface ApiError {
   message: string
   detail?: string
 }
+
+export interface ProviderResponse {
+  id: string
+  organization_id: string
+  name: string
+  provider_type: string
+  base_url?: string | null
+  default_model?: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ProviderModelResponse {
+  id: string
+  provider_id: string
+  name: string
+  model_identifier: string
+  context_window?: number | null
+  max_output_tokens?: number | null
+  supports_streaming: boolean
+  supports_tools: boolean
+  supports_vision: boolean
+  supports_reasoning: boolean
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ApiKeyCreateRequest {
+  name: string
+  expires_at?: string | null
+}
+
+export interface ApiKeyResponse {
+  id: string
+  organization_id: string
+  name: string
+  key_prefix: string
+  expires_at?: string | null
+  is_active: boolean
+  created_by?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ApiKeyCreateResponse extends ApiKeyResponse {
+  key: string
+}
