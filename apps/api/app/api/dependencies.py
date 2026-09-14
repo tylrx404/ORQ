@@ -1,7 +1,9 @@
+from dataclasses import dataclass
+from typing import Optional
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, Path, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, Header, HTTPException, Path, status
+from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -41,13 +43,39 @@ from app.services.organization_quota import OrganizationQuotaService
 from app.repositories.organization_quota_repository import OrganizationQuotaRepository
 from app.redis.client import redis_manager
 
-from fastapi.security import APIKeyHeader
+# ---------------------------------------------------------------------------
+# Security schemes
+# ---------------------------------------------------------------------------
 
+# Used by existing API-key-only endpoints (raises 401 automatically).
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
 
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl="/v1/auth/login"
+# Optional variants used by the dual-auth dependency (do NOT raise automatically).
+api_key_header_optional = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/login")
+
+oauth2_scheme_optional = OAuth2PasswordBearer(
+    tokenUrl="/v1/auth/login",
+    auto_error=False,
 )
+
+
+# ---------------------------------------------------------------------------
+# Dual-auth context for chat-completion requests
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ChatCompletionAuthContext:
+    """Authentication context for chat completion requests.
+
+    Populated from either an API key (machine-to-machine) or a JWT +
+    organization membership (dashboard Playground). ``api_key_id`` is
+    ``None`` for JWT-authenticated Playground requests.
+    """
+
+    organization_id: UUID
+    api_key_id: Optional[UUID]
 
 def get_user_repository(db: AsyncSession = Depends(get_db)) -> UserRepository:
     """Provide a UserRepository instance."""
@@ -334,6 +362,108 @@ async def get_current_api_key(
             detail=str(e),
             headers={"WWW-Authenticate": "ApiKey"},
         )
+
+
+
+async def get_chat_completion_auth(
+    x_api_key: Optional[str] = Depends(api_key_header_optional),
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+    x_organization_id: Optional[str] = Header(default=None, alias="X-Organization-Id"),
+    api_key_service: ApiKeyService = Depends(get_api_key_service),
+    user_repository: UserRepository = Depends(get_user_repository),
+    membership_repo: OrganizationMembershipRepository = Depends(get_organization_membership_repository),
+) -> ChatCompletionAuthContext:
+    """Unified authentication for chat-completion requests.
+
+    Tries API-key authentication first (backward-compatible machine-to-machine).
+    Falls back to JWT + X-Organization-Id header for dashboard Playground usage.
+    Raises 401 if neither authentication method succeeds.
+    """
+    # --- Path 1: X-API-Key (machine-to-machine, unchanged behaviour) ---
+    if x_api_key:
+        try:
+            api_key = await api_key_service.validate_key(x_api_key)
+            return ChatCompletionAuthContext(
+                organization_id=api_key.organization_id,
+                api_key_id=api_key.id,
+            )
+        except InvalidApiKeyError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=str(e),
+                headers={"WWW-Authenticate": "ApiKey"},
+            )
+
+    # --- Path 2: JWT + X-Organization-Id (dashboard Playground) ---
+    if token:
+        credentials_exception = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+        try:
+            payload = decode_access_token(token)
+        except TokenError as e:
+            raise credentials_exception from e
+
+        user_id_str = payload.get("sub")
+        if not user_id_str:
+            raise credentials_exception
+
+        try:
+            user_id = UUID(user_id_str)
+        except ValueError as e:
+            raise credentials_exception from e
+
+        user = await user_repository.get_by_id(user_id)
+        if not user:
+            raise credentials_exception
+
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User account is disabled",
+            )
+
+        if not x_organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="X-Organization-Id header is required for JWT-authenticated requests.",
+            )
+
+        try:
+            org_id = UUID(x_organization_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="X-Organization-Id header must be a valid UUID.",
+            )
+
+        membership = await membership_repo.get_membership(org_id, user_id)
+        if not membership:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not a member of the specified organization.",
+            )
+
+        if not has_permission(membership.role, Permission.VIEW_MEMBERS):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions. Requires member role.",
+            )
+
+        return ChatCompletionAuthContext(
+            organization_id=org_id,
+            api_key_id=None,
+        )
+
+    # --- No valid authentication provided ---
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated. Provide either X-API-Key or Authorization: Bearer <token>.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 def get_execution_log_repository(

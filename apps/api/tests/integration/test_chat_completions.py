@@ -4,7 +4,11 @@ from uuid import uuid4
 import httpx
 
 from app.main import app
-from app.api.dependencies import get_current_api_key, get_llm_gateway_service
+from app.api.dependencies import (
+    ChatCompletionAuthContext,
+    get_chat_completion_auth,
+    get_llm_gateway_service,
+)
 from app.models.api_key import ApiKey
 from app.models.provider import Provider, ProviderType
 from app.models.provider_model import ProviderModel
@@ -43,14 +47,16 @@ class MockExecutionLogRepo:
 @pytest.fixture
 def gateway_setup():
     org_id = uuid4()
+    api_key_id = uuid4()
     api_key_obj = ApiKey(
-        id=uuid4(),
+        id=api_key_id,
         organization_id=org_id,
         name="test-key",
         key_prefix="orq_sk_12345678",
         key_hash="hash",
         is_active=True,
     )
+    auth_ctx = ChatCompletionAuthContext(organization_id=org_id, api_key_id=api_key_id)
     provider = Provider(
         id=uuid4(),
         organization_id=org_id,
@@ -74,6 +80,7 @@ def gateway_setup():
     yield {
         "org_id": org_id,
         "api_key": api_key_obj,
+        "auth_ctx": auth_ctx,
         "provider": provider,
         "model": model,
         "provider_repo": provider_repo,
@@ -114,7 +121,7 @@ async def test_chat_completion_success(gateway_setup):
         http_client=http_client,
     )
 
-    app.dependency_overrides[get_current_api_key] = lambda: setup["api_key"]
+    app.dependency_overrides[get_chat_completion_auth] = lambda: setup["auth_ctx"]
     app.dependency_overrides[get_llm_gateway_service] = lambda: gateway_service
 
     try:
@@ -164,7 +171,7 @@ async def test_chat_completion_unknown_model(gateway_setup):
         setup["execution_log_repo"],
     )
 
-    app.dependency_overrides[get_current_api_key] = lambda: setup["api_key"]
+    app.dependency_overrides[get_chat_completion_auth] = lambda: setup["auth_ctx"]
     app.dependency_overrides[get_llm_gateway_service] = lambda: gateway_service
 
     try:
@@ -202,7 +209,7 @@ async def test_chat_completion_provider_failure(gateway_setup):
         http_client=http_client,
     )
 
-    app.dependency_overrides[get_current_api_key] = lambda: setup["api_key"]
+    app.dependency_overrides[get_chat_completion_auth] = lambda: setup["auth_ctx"]
     app.dependency_overrides[get_llm_gateway_service] = lambda: gateway_service
 
     try:
@@ -241,7 +248,7 @@ async def test_chat_completion_stream_success(gateway_setup):
         http_client=http_client,
     )
 
-    app.dependency_overrides[get_current_api_key] = lambda: setup["api_key"]
+    app.dependency_overrides[get_chat_completion_auth] = lambda: setup["auth_ctx"]
     app.dependency_overrides[get_llm_gateway_service] = lambda: gateway_service
 
     try:

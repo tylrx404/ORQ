@@ -4,7 +4,12 @@ from httpx import AsyncClient, ASGITransport
 from uuid import uuid4
 
 from app.main import app
-from app.api.dependencies import get_current_api_key, get_llm_gateway_service, get_rate_limit_service
+from app.api.dependencies import (
+    ChatCompletionAuthContext,
+    get_chat_completion_auth,
+    get_llm_gateway_service,
+    get_rate_limit_service,
+)
 from app.models.api_key import ApiKey
 from app.services.rate_limit import RateLimitService
 
@@ -94,12 +99,13 @@ def rate_limit_setup(mock_redis):
         key_prefix="prefix",
         is_active=True,
     )
+    auth_ctx = ChatCompletionAuthContext(organization_id=org_id, api_key_id=api_key.id)
 
     class MockLLMGatewayService:
         async def execute_chat_completion(self, *args, **kwargs):
             return {"id": "chatcmpl-123"}, None
 
-    app.dependency_overrides[get_current_api_key] = lambda: api_key
+    app.dependency_overrides[get_chat_completion_auth] = lambda: auth_ctx
     app.dependency_overrides[get_llm_gateway_service] = lambda: MockLLMGatewayService()
     
     rate_limit_service = RateLimitService(mock_redis)

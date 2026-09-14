@@ -7,7 +7,8 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.api.dependencies import (
-    get_current_api_key,
+    ChatCompletionAuthContext,
+    get_chat_completion_auth,
     get_llm_gateway_service,
     get_organization_quota_service,
 )
@@ -101,17 +102,18 @@ def quota_enforcement_setup():
         key_hash="hash",
         is_active=True,
     )
+    auth_ctx = ChatCompletionAuthContext(organization_id=org_id, api_key_id=api_key.id)
 
     class MockGateway:
         async def execute_chat_completion(self, *args, **kwargs):
             return {"id": "chatcmpl-test", "choices": [{"message": {"content": "ok"}}]}, None
 
-    app.dependency_overrides[get_current_api_key] = lambda: api_key
+    app.dependency_overrides[get_chat_completion_auth] = lambda: auth_ctx
     app.dependency_overrides[get_llm_gateway_service] = lambda: MockGateway()
 
-    yield {"org_id": org_id, "api_key": api_key}
+    yield {"org_id": org_id, "api_key": api_key, "auth_ctx": auth_ctx}
 
-    app.dependency_overrides.pop(get_current_api_key, None)
+    app.dependency_overrides.pop(get_chat_completion_auth, None)
     app.dependency_overrides.pop(get_llm_gateway_service, None)
     app.dependency_overrides.pop(get_organization_quota_service, None)
 

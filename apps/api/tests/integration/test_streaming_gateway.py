@@ -5,7 +5,7 @@ from uuid import uuid4
 from httpx import AsyncClient, ASGITransport
 
 from app.main import app
-from app.api.dependencies import get_current_api_key, get_llm_gateway_service
+from app.api.dependencies import ChatCompletionAuthContext, get_chat_completion_auth, get_llm_gateway_service
 from app.models.api_key import ApiKey
 from app.models.provider import Provider, ProviderType
 from app.models.provider_model import ProviderModel
@@ -71,10 +71,12 @@ def streaming_setup():
     provider_repo = MockProviderRepo([provider])
     model_repo = MockModelRepo([model])
     execution_log_repo = MockExecutionLogRepo()
+    auth_ctx = ChatCompletionAuthContext(organization_id=org_id, api_key_id=api_key_obj.id)
 
     yield {
         "org_id": org_id,
         "api_key": api_key_obj,
+        "auth_ctx": auth_ctx,
         "provider": provider,
         "model": model,
         "provider_repo": provider_repo,
@@ -106,7 +108,7 @@ async def test_successful_streaming(streaming_setup):
         http_client=http_client,
     )
 
-    app.dependency_overrides[get_current_api_key] = lambda: setup["api_key"]
+    app.dependency_overrides[get_chat_completion_auth] = lambda: setup["auth_ctx"]
     app.dependency_overrides[get_llm_gateway_service] = lambda: gateway_service
 
     try:
@@ -152,7 +154,7 @@ async def test_provider_initial_error_before_stream(streaming_setup):
         http_client=http_client,
     )
 
-    app.dependency_overrides[get_current_api_key] = lambda: setup["api_key"]
+    app.dependency_overrides[get_chat_completion_auth] = lambda: setup["auth_ctx"]
     app.dependency_overrides[get_llm_gateway_service] = lambda: gateway_service
 
     try:
@@ -200,7 +202,7 @@ async def test_usage_extraction_and_logging(streaming_setup):
         http_client=http_client,
     )
 
-    app.dependency_overrides[get_current_api_key] = lambda: setup["api_key"]
+    app.dependency_overrides[get_chat_completion_auth] = lambda: setup["auth_ctx"]
     app.dependency_overrides[get_llm_gateway_service] = lambda: gateway_service
 
     try:

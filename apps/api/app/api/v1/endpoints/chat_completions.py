@@ -3,13 +3,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from app.api.dependencies import (
-    get_current_api_key,
+    ChatCompletionAuthContext,
+    get_chat_completion_auth,
     get_llm_gateway_service,
     get_organization_quota_service,
     get_rate_limit_service,
 )
 from app.core.config import settings
-from app.models.api_key import ApiKey
 from app.schemas.chat_completion import ChatCompletionRequest
 from app.services.organization_quota import OrganizationQuotaService
 from app.services.rate_limit import RateLimitService
@@ -30,18 +30,20 @@ router = APIRouter()
 )
 async def create_chat_completion(
     request: ChatCompletionRequest,
-    current_api_key: ApiKey = Depends(get_current_api_key),
+    auth_context: ChatCompletionAuthContext = Depends(get_chat_completion_auth),
     llm_gateway_service: LLMGatewayService = Depends(get_llm_gateway_service),
     rate_limit_service: RateLimitService = Depends(get_rate_limit_service),
     quota_service: OrganizationQuotaService = Depends(get_organization_quota_service),
 ) -> Any:
     """
-    OpenAI-compatible chat completion proxy endpoint authenticated via X-API-Key.
+    OpenAI-compatible chat completion proxy endpoint.
+    Supports X-API-Key (machine-to-machine) or JWT + X-Organization-Id (dashboard Playground).
     Supports both non-streaming (JSON) and streaming (text/event-stream) responses.
     """
+
     try:
         allowed, headers, error_body = await rate_limit_service.check_rate_limit(
-            organization_id=current_api_key.organization_id,
+            organization_id=auth_context.organization_id,
             limit=settings.RATE_LIMIT_RPM,
         )
     except Exception as e:
@@ -54,7 +56,7 @@ async def create_chat_completion(
         return JSONResponse(status_code=429, content=error_body, headers=headers)
 
     quota_allowed = await quota_service.check_and_increment_request_quota(
-        organization_id=current_api_key.organization_id
+        organization_id=auth_context.organization_id
     )
     if not quota_allowed:
         return JSONResponse(
@@ -72,8 +74,8 @@ async def create_chat_completion(
     try:
         if request.stream:
             stream_gen = await llm_gateway_service.stream_chat_completion(
-                organization_id=current_api_key.organization_id,
-                api_key_id=current_api_key.id,
+                organization_id=auth_context.organization_id,
+                api_key_id=auth_context.api_key_id,
                 model_identifier=request.model,
                 messages=[m.model_dump() for m in request.messages],
                 temperature=request.temperature,
@@ -83,8 +85,8 @@ async def create_chat_completion(
             return StreamingResponse(stream_gen, media_type="text/event-stream", headers=headers)
 
         response_data, _ = await llm_gateway_service.execute_chat_completion(
-            organization_id=current_api_key.organization_id,
-            api_key_id=current_api_key.id,
+            organization_id=auth_context.organization_id,
+            api_key_id=auth_context.api_key_id,
             model_identifier=request.model,
             messages=[m.model_dump() for m in request.messages],
             temperature=request.temperature,
@@ -100,7 +102,7 @@ async def create_chat_completion(
 
         if total_tokens > 0:
             token_quota_allowed = await quota_service.check_and_increment_token_quota(
-                organization_id=current_api_key.organization_id,
+                organization_id=auth_context.organization_id,
                 tokens=total_tokens,
             )
             if not token_quota_allowed:
@@ -118,23 +120,23 @@ async def create_chat_completion(
 
         return JSONResponse(content=response_data, headers=headers)
     except (ModelNotFoundError, ProviderNotFoundError) as e:
-        await quota_service.rollback_request_quota(current_api_key.organization_id)
+        await quota_service.rollback_request_quota(auth_context.organization_id)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
     except ProviderExecutionError as e:
-        await quota_service.rollback_request_quota(current_api_key.organization_id)
+        await quota_service.rollback_request_quota(auth_context.organization_id)
         raise HTTPException(
             status_code=e.status_code,
             detail=e.message,
         )
     except LLMGatewayError as e:
-        await quota_service.rollback_request_quota(current_api_key.organization_id)
+        await quota_service.rollback_request_quota(auth_context.organization_id)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:
-        await quota_service.rollback_request_quota(current_api_key.organization_id)
+        await quota_service.rollback_request_quota(auth_context.organization_id)
         raise e
