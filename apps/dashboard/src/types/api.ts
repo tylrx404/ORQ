@@ -98,6 +98,30 @@ export interface ProviderUpdateRequest {
   is_active?: boolean
 }
 
+export interface ProviderModelCreateRequest {
+  name: string
+  model_identifier: string
+  context_window?: number | null
+  max_output_tokens?: number | null
+  supports_streaming?: boolean
+  supports_tools?: boolean
+  supports_vision?: boolean
+  supports_reasoning?: boolean
+  is_active?: boolean
+}
+
+export interface ProviderModelUpdateRequest {
+  name?: string
+  model_identifier?: string
+  context_window?: number | null
+  max_output_tokens?: number | null
+  supports_streaming?: boolean
+  supports_tools?: boolean
+  supports_vision?: boolean
+  supports_reasoning?: boolean
+  is_active?: boolean
+}
+
 export interface ProviderModelResponse {
   id: string
   provider_id: string
