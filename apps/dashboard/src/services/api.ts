@@ -7,6 +7,8 @@ import type {
   ProviderCreateRequest,
   ProviderUpdateRequest,
   ProviderModelResponse,
+  ProviderModelCreateRequest,
+  ProviderModelUpdateRequest,
   ApiKeyCreateRequest,
   ApiKeyCreateResponse,
 } from "../types/api"
@@ -193,6 +195,69 @@ export const api = {
     return fetchJson<ProviderModelResponse[]>(
       `${API_BASE_URL}/organizations/${organizationId}/providers/${providerId}/models?skip=${skip}&limit=${limit}`
     )
+  },
+
+  /**
+   * Create a model for a provider within an organization.
+   */
+  async createProviderModel(
+    organizationId: string,
+    providerId: string,
+    request: ProviderModelCreateRequest
+  ): Promise<ProviderModelResponse> {
+    return fetchJson<ProviderModelResponse>(
+      `${API_BASE_URL}/organizations/${organizationId}/providers/${providerId}/models`,
+      {
+        method: "POST",
+        body: JSON.stringify(request),
+      }
+    )
+  },
+
+  /**
+   * Update a model for a provider.
+   */
+  async updateProviderModel(
+    providerId: string,
+    modelId: string,
+    request: ProviderModelUpdateRequest
+  ): Promise<ProviderModelResponse> {
+    return fetchJson<ProviderModelResponse>(
+      `${API_BASE_URL}/providers/${providerId}/models/${modelId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(request),
+      }
+    )
+  },
+
+  /**
+   * Delete a model for a provider.
+   */
+  async deleteProviderModel(providerId: string, modelId: string): Promise<void> {
+    const token = localStorage.getItem("orq_access_token")
+    const headers = new Headers()
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`)
+    }
+    const res = await fetch(`${API_BASE_URL}/providers/${providerId}/models/${modelId}`, {
+      method: "DELETE",
+      headers,
+    })
+    if (!res.ok) {
+      let errorDetail = `HTTP ${res.status}: ${res.statusText}`
+      try {
+        const data = await res.json()
+        if (data?.detail) {
+          errorDetail = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)
+        } else if (data?.message) {
+          errorDetail = data.message
+        }
+      } catch {
+        // Body was not JSON
+      }
+      throw new ApiClientError(res.status, errorDetail)
+    }
   },
 
   /**

@@ -4,6 +4,7 @@ import { LandingPage } from "./pages/LandingPage"
 import { OverviewPage } from "./pages/OverviewPage"
 import { PlaygroundPage } from "./pages/PlaygroundPage"
 import { ProvidersPage } from "./pages/ProvidersPage"
+import { ModelsPage } from "./pages/ModelsPage"
 import { PlaceholderPage } from "./pages/PlaceholderPage"
 
 export default function App() {
@@ -40,18 +41,7 @@ export default function App() {
           path="/app/models"
           element={
             <GlobalLayout>
-              <PlaceholderPage
-                eyebrow="Infrastructure"
-                title="Models"
-                description="Configure, catalog, and map models available to your organizations with designated aliases and routing parameters."
-                endpointHint="GET /api/v1/organizations/{id}/providers/{pid}/models"
-                features={[
-                  "Model registry and routing",
-                  "Context window limits",
-                  "Default model designation",
-                  "Provider association",
-                ]}
-              />
+              <ModelsPage />
             </GlobalLayout>
           }
         />
