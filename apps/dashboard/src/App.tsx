@@ -5,6 +5,7 @@ import { OverviewPage } from "./pages/OverviewPage"
 import { PlaygroundPage } from "./pages/PlaygroundPage"
 import { ProvidersPage } from "./pages/ProvidersPage"
 import { ModelsPage } from "./pages/ModelsPage"
+import { ApiKeysPage } from "./pages/ApiKeysPage"
 import { PlaceholderPage } from "./pages/PlaceholderPage"
 
 export default function App() {
@@ -59,18 +60,7 @@ export default function App() {
           path="/app/api-keys"
           element={
             <GlobalLayout>
-              <PlaceholderPage
-                eyebrow="Infrastructure"
-                title="API Keys"
-                description="Issue, inspect, and revoke machine-to-machine API keys for client integrations and gateway access."
-                endpointHint="GET /api/v1/organizations/{id}/api-keys"
-                features={[
-                  "High-entropy SHA-256 key hashing",
-                  "One-time display raw secret generation",
-                  "Immediate revocation controls",
-                  "Expiration policies",
-                ]}
-              />
+              <ApiKeysPage />
             </GlobalLayout>
           }
         />

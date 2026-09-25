@@ -11,6 +11,8 @@ import type {
   ProviderModelUpdateRequest,
   ApiKeyCreateRequest,
   ApiKeyCreateResponse,
+  ApiKeyResponse,
+  ApiKeyUpdateRequest,
 } from "../types/api"
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api/v1"
@@ -271,6 +273,57 @@ export const api = {
         body: JSON.stringify(request)
       }
     )
+  },
+
+  /**
+   * List API keys for an organization.
+   */
+  async listApiKeys(organizationId: string, skip = 0, limit = 100): Promise<ApiKeyResponse[]> {
+    return fetchJson<ApiKeyResponse[]>(
+      `${API_BASE_URL}/organizations/${organizationId}/api-keys?skip=${skip}&limit=${limit}`
+    )
+  },
+
+  /**
+   * Update an API key (rename or activate/deactivate).
+   */
+  async updateApiKey(keyId: string, request: ApiKeyUpdateRequest): Promise<ApiKeyResponse> {
+    return fetchJson<ApiKeyResponse>(
+      `${API_BASE_URL}/api-keys/${keyId}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(request),
+      }
+    )
+  },
+
+  /**
+   * Delete an API key by ID (returns 204 No Content).
+   */
+  async deleteApiKey(keyId: string): Promise<void> {
+    const token = localStorage.getItem("orq_access_token")
+    const headers = new Headers()
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`)
+    }
+    const res = await fetch(`${API_BASE_URL}/api-keys/${keyId}`, {
+      method: "DELETE",
+      headers,
+    })
+    if (!res.ok) {
+      let errorDetail = `HTTP ${res.status}: ${res.statusText}`
+      try {
+        const data = await res.json()
+        if (data?.detail) {
+          errorDetail = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)
+        } else if (data?.message) {
+          errorDetail = data.message
+        }
+      } catch {
+        // Body was not JSON
+      }
+      throw new ApiClientError(res.status, errorDetail)
+    }
   },
 }
 
