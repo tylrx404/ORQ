@@ -143,6 +143,11 @@ export interface ApiKeyCreateRequest {
   expires_at?: string | null
 }
 
+export interface ApiKeyUpdateRequest {
+  name?: string
+  is_active?: boolean
+}
+
 export interface ApiKeyResponse {
   id: string
   organization_id: string
