@@ -6,6 +6,7 @@ import { PlaygroundPage } from "./pages/PlaygroundPage"
 import { ProvidersPage } from "./pages/ProvidersPage"
 import { ModelsPage } from "./pages/ModelsPage"
 import { ApiKeysPage } from "./pages/ApiKeysPage"
+import { ExecutionsPage } from "./pages/ExecutionsPage"
 import { PlaceholderPage } from "./pages/PlaceholderPage"
 
 export default function App() {
@@ -69,18 +70,7 @@ export default function App() {
           path="/app/executions"
           element={
             <GlobalLayout>
-              <PlaceholderPage
-                eyebrow="Observability"
-                title="Executions"
-                description="Detailed audit logs of every gateway LLM execution, including status codes, token breakdown, and response latency."
-                endpointHint="GET /api/v1/organizations/{id}/executions"
-                features={[
-                  "Status code filtering (200, 429, 502)",
-                  "Token usage audit (prompt & completion)",
-                  "Latency tracing (milliseconds)",
-                  "Failure error message inspection",
-                ]}
-              />
+              <ExecutionsPage />
             </GlobalLayout>
           }
         />
