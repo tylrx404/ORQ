@@ -7,6 +7,7 @@ import { ProvidersPage } from "./pages/ProvidersPage"
 import { ModelsPage } from "./pages/ModelsPage"
 import { ApiKeysPage } from "./pages/ApiKeysPage"
 import { ExecutionsPage } from "./pages/ExecutionsPage"
+import { UsagePage } from "./pages/UsagePage"
 import { PlaceholderPage } from "./pages/PlaceholderPage"
 
 export default function App() {
@@ -79,18 +80,7 @@ export default function App() {
           path="/app/usage"
           element={
             <GlobalLayout>
-              <PlaceholderPage
-                eyebrow="Observability"
-                title="Usage Analytics"
-                description="Aggregated usage metrics across time intervals, breakdown by model identifier, and overall request volume."
-                endpointHint="GET /api/v1/organizations/{id}/usage"
-                features={[
-                  "Time-bucketed request metrics",
-                  "Cumulative token consumption",
-                  "Success vs. error distribution",
-                  "Per-model utilization breakdown",
-                ]}
-              />
+              <UsagePage />
             </GlobalLayout>
           }
         />
