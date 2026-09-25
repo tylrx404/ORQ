@@ -127,6 +127,15 @@ export const api = {
   },
 
   /**
+   * Fetch a single execution log by ID.
+   */
+  async getExecution(executionId: string): Promise<ExecutionLogResponse> {
+    return fetchJson<ExecutionLogResponse>(
+      `${API_BASE_URL}/executions/${executionId}`
+    )
+  },
+
+  /**
    * List providers for an organization.
    */
   async listProviders(organizationId: string, skip = 0, limit = 100): Promise<ProviderResponse[]> {
