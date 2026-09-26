@@ -29,6 +29,15 @@ export interface MembershipResponse {
   updated_at: string
 }
 
+export interface MembershipCreateRequest {
+  user_id: string
+  role?: MembershipRole
+}
+
+export interface MembershipUpdateRequest {
+  role: MembershipRole
+}
+
 export interface UsageSummaryResponse {
   organization_id: string
   start: string
