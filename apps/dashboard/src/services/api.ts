@@ -1,5 +1,7 @@
 import type {
   Organization,
+  OrganizationUpdateRequest,
+  MembershipResponse,
   UsageSummaryResponse,
   OrganizationQuotaResponse,
   ExecutionLogResponse,
@@ -86,6 +88,40 @@ export const api = {
    */
   async getOrganization(organizationId: string): Promise<Organization> {
     return fetchJson<Organization>(`${API_BASE_URL}/organizations/${organizationId}`)
+  },
+
+  /**
+   * Update an organization (requires admin or owner).
+   */
+  async updateOrganization(
+    organizationId: string,
+    data: OrganizationUpdateRequest
+  ): Promise<Organization> {
+    return fetchJson<Organization>(`${API_BASE_URL}/organizations/${organizationId}`, {
+      method: "PATCH",
+      headers: {
+        "X-Organization-Id": organizationId,
+      },
+      body: JSON.stringify(data),
+    })
+  },
+
+  /**
+   * List members of an organization.
+   */
+  async listOrganizationMembers(
+    organizationId: string,
+    skip = 0,
+    limit = 100
+  ): Promise<MembershipResponse[]> {
+    return fetchJson<MembershipResponse[]>(
+      `${API_BASE_URL}/organizations/${organizationId}/members?skip=${skip}&limit=${limit}`,
+      {
+        headers: {
+          "X-Organization-Id": organizationId,
+        },
+      }
+    )
   },
 
   /**
