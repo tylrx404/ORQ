@@ -8,6 +8,7 @@ import { ModelsPage } from "./pages/ModelsPage"
 import { ApiKeysPage } from "./pages/ApiKeysPage"
 import { ExecutionsPage } from "./pages/ExecutionsPage"
 import { UsagePage } from "./pages/UsagePage"
+import { SettingsPage } from "./pages/SettingsPage"
 import { PlaceholderPage } from "./pages/PlaceholderPage"
 
 export default function App() {
@@ -109,18 +110,7 @@ export default function App() {
           path="/app/settings"
           element={
             <GlobalLayout>
-              <PlaceholderPage
-                eyebrow="System"
-                title="Settings"
-                description="Configure organization metadata, team member access roles, and platform notifications."
-                endpointHint="GET /api/v1/organizations/{id}"
-                features={[
-                  "Organization slug and name management",
-                  "Role-based access control (Admin / Member)",
-                  "Invitation link generator",
-                  "System connection diagnostics",
-                ]}
-              />
+              <SettingsPage />
             </GlobalLayout>
           }
         />

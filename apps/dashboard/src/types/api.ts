@@ -12,6 +12,23 @@ export interface Organization {
   updated_at: string
 }
 
+export interface OrganizationUpdateRequest {
+  name?: string
+  slug?: string
+  description?: string | null
+}
+
+export type MembershipRole = "owner" | "admin" | "member"
+
+export interface MembershipResponse {
+  id: string
+  organization_id: string
+  user_id: string
+  role: MembershipRole
+  created_at: string
+  updated_at: string
+}
+
 export interface UsageSummaryResponse {
   organization_id: string
   start: string
