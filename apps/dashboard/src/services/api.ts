@@ -2,6 +2,8 @@ import type {
   Organization,
   OrganizationUpdateRequest,
   MembershipResponse,
+  MembershipCreateRequest,
+  MembershipUpdateRequest,
   UsageSummaryResponse,
   OrganizationQuotaResponse,
   ExecutionLogResponse,
@@ -122,6 +124,83 @@ export const api = {
         },
       }
     )
+  },
+
+  /**
+   * Add a member to an organization (requires admin or owner).
+   */
+  async addOrganizationMember(
+    organizationId: string,
+    request: MembershipCreateRequest
+  ): Promise<MembershipResponse> {
+    return fetchJson<MembershipResponse>(
+      `${API_BASE_URL}/organizations/${organizationId}/members`,
+      {
+        method: "POST",
+        headers: {
+          "X-Organization-Id": organizationId,
+        },
+        body: JSON.stringify(request),
+      }
+    )
+  },
+
+  /**
+   * Update an organization member's role (requires owner).
+   */
+  async updateOrganizationMemberRole(
+    organizationId: string,
+    userId: string,
+    request: MembershipUpdateRequest
+  ): Promise<MembershipResponse> {
+    return fetchJson<MembershipResponse>(
+      `${API_BASE_URL}/organizations/${organizationId}/members/${userId}`,
+      {
+        method: "PATCH",
+        headers: {
+          "X-Organization-Id": organizationId,
+        },
+        body: JSON.stringify(request),
+      }
+    )
+  },
+
+  /**
+   * Remove a member from an organization (requires admin or owner).
+   */
+  async removeOrganizationMember(
+    organizationId: string,
+    userId: string
+  ): Promise<void> {
+    const token = localStorage.getItem("orq_access_token")
+    const headers = new Headers()
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`)
+    }
+    headers.set("X-Organization-Id", organizationId)
+
+    const res = await fetch(
+      `${API_BASE_URL}/organizations/${organizationId}/members/${userId}`,
+      {
+        method: "DELETE",
+        headers,
+      }
+    )
+
+    if (!res.ok) {
+      let errorDetail = `HTTP ${res.status}: ${res.statusText}`
+      try {
+        const data = await res.json()
+        if (data?.detail) {
+          errorDetail = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)
+        } else if (data?.message) {
+          errorDetail = data.message
+        }
+      } catch {
+        // Response was not JSON
+      }
+      throw new ApiClientError(res.status, errorDetail)
+    }
   },
 
   /**
