@@ -38,6 +38,27 @@ export interface MembershipUpdateRequest {
   role: MembershipRole
 }
 
+export type InvitationStatus = "pending" | "accepted" | "expired" | "revoked"
+
+export interface OrganizationInvitationCreateRequest {
+  email: string
+  role?: MembershipRole
+}
+
+export interface OrganizationInvitationResponse {
+  id: string
+  organization_id: string
+  email: string
+  role: MembershipRole
+  token: string
+  status: InvitationStatus
+  created_by: string
+  expires_at: string
+  accepted_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface UsageSummaryResponse {
   organization_id: string
   start: string
