@@ -4,6 +4,8 @@ import type {
   MembershipResponse,
   MembershipCreateRequest,
   MembershipUpdateRequest,
+  OrganizationInvitationCreateRequest,
+  OrganizationInvitationResponse,
   UsageSummaryResponse,
   OrganizationQuotaResponse,
   ExecutionLogResponse,
@@ -181,6 +183,81 @@ export const api = {
 
     const res = await fetch(
       `${API_BASE_URL}/organizations/${organizationId}/members/${userId}`,
+      {
+        method: "DELETE",
+        headers,
+      }
+    )
+
+    if (!res.ok) {
+      let errorDetail = `HTTP ${res.status}: ${res.statusText}`
+      try {
+        const data = await res.json()
+        if (data?.detail) {
+          errorDetail = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)
+        } else if (data?.message) {
+          errorDetail = data.message
+        }
+      } catch {
+        // Response was not JSON
+      }
+      throw new ApiClientError(res.status, errorDetail)
+    }
+  },
+
+  /**
+   * List invitations for an organization (requires admin or owner).
+   */
+  async listOrganizationInvitations(
+    organizationId: string,
+    skip = 0,
+    limit = 100
+  ): Promise<OrganizationInvitationResponse[]> {
+    return fetchJson<OrganizationInvitationResponse[]>(
+      `${API_BASE_URL}/organizations/${organizationId}/invitations?skip=${skip}&limit=${limit}`,
+      {
+        headers: {
+          "X-Organization-Id": organizationId,
+        },
+      }
+    )
+  },
+
+  /**
+   * Create an invitation to join an organization (requires admin or owner).
+   */
+  async createOrganizationInvitation(
+    organizationId: string,
+    request: OrganizationInvitationCreateRequest
+  ): Promise<OrganizationInvitationResponse> {
+    return fetchJson<OrganizationInvitationResponse>(
+      `${API_BASE_URL}/organizations/${organizationId}/invitations`,
+      {
+        method: "POST",
+        headers: {
+          "X-Organization-Id": organizationId,
+        },
+        body: JSON.stringify(request),
+      }
+    )
+  },
+
+  /**
+   * Revoke an organization invitation (requires admin or owner).
+   */
+  async revokeOrganizationInvitation(
+    organizationId: string,
+    invitationId: string
+  ): Promise<void> {
+    const token = localStorage.getItem("orq_access_token")
+    const headers = new Headers()
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`)
+    }
+    headers.set("X-Organization-Id", organizationId)
+
+    const res = await fetch(
+      `${API_BASE_URL}/organizations/${organizationId}/invitations/${invitationId}`,
       {
         method: "DELETE",
         headers,

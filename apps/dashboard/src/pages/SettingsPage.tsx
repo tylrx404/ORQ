@@ -15,6 +15,11 @@ import {
   Copy,
   Check,
   AlertTriangle,
+  Mail,
+  Send,
+  Clock,
+  Ban,
+  KeyRound,
 } from "lucide-react"
 import { PageHeader, PageContainer } from "../components/ui/PageHeader"
 import { Button } from "../components/ui/Button"
@@ -26,7 +31,12 @@ import { Skeleton } from "../components/ui/Loading"
 import { useOrganization } from "../providers/useOrganization"
 import { api, ApiClientError } from "../services/api"
 import { showToast } from "../components/ui/toast-fn"
-import type { Organization, MembershipRole, MembershipResponse } from "../types/api"
+import type {
+  Organization,
+  MembershipRole,
+  MembershipResponse,
+  OrganizationInvitationResponse,
+} from "../types/api"
 
 function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "—"
@@ -103,7 +113,23 @@ export function SettingsPage() {
   const [removingMember, setRemovingMember] = useState<MembershipResponse | null>(null)
   const [confirmRemoving, setConfirmRemoving] = useState(false)
 
-  // Copied User ID feedback
+  // Invitations section state
+  const [invitations, setInvitations] = useState<OrganizationInvitationResponse[]>([])
+  const [invitationsLoading, setInvitationsLoading] = useState(false)
+  const [invitationsError, setInvitationsError] = useState<string | null>(null)
+
+  // Create Invitation state
+  const [isCreatingInvitation, setIsCreatingInvitation] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState("")
+  const [inviteRole, setInviteRole] = useState<MembershipRole>("member")
+  const [creatingInvitation, setCreatingInvitation] = useState(false)
+  const [createInviteError, setCreateInviteError] = useState<string | null>(null)
+
+  // Revoke Invitation state
+  const [revokingInvitation, setRevokingInvitation] = useState<OrganizationInvitationResponse | null>(null)
+  const [confirmRevoking, setConfirmRevoking] = useState(false)
+
+  // Copied text feedback
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   // Unique accessible IDs for inputs
@@ -112,6 +138,8 @@ export function SettingsPage() {
   const descInputId = useId()
   const newUserIdInputId = useId()
   const newRoleSelectId = useId()
+  const inviteEmailInputId = useId()
+  const inviteRoleSelectId = useId()
 
   const fetchMembers = useCallback(async (orgId: string) => {
     setMembersLoading(true)
@@ -134,6 +162,27 @@ export function SettingsPage() {
     }
   }, [])
 
+  const fetchInvitations = useCallback(async (orgId: string) => {
+    setInvitationsLoading(true)
+    setInvitationsError(null)
+    try {
+      const data = await api.listOrganizationInvitations(orgId)
+      setInvitations(data)
+      return data
+    } catch (err: unknown) {
+      const msg =
+        err instanceof ApiClientError
+          ? err.detail
+          : err instanceof Error
+          ? err.message
+          : "Failed to load organization invitations."
+      setInvitationsError(msg)
+      return []
+    } finally {
+      setInvitationsLoading(false)
+    }
+  }, [])
+
   // Determine user's role in this organization
   const resolveRole = useCallback(
     async (orgId: string) => {
@@ -151,26 +200,39 @@ export function SettingsPage() {
         setCurrentUserId(myUserId || null)
 
         const memberList = await fetchMembers(orgId)
+        let resolvedRole: MembershipRole | null = null
+
         if (myUserId) {
           const myMembership = memberList.find((m) => m.user_id === myUserId)
           if (myMembership) {
-            setUserRole(myMembership.role)
-            return
+            resolvedRole = myMembership.role
+            setUserRole(resolvedRole)
           }
         }
 
-        if (memberList.length > 0) {
-          setUserRole("member")
+        if (!resolvedRole) {
+          if (memberList.length > 0) {
+            resolvedRole = "member"
+            setUserRole("member")
+          } else {
+            setUserRole(null)
+          }
+        }
+
+        // Only fetch invitations if the user is admin or owner
+        if (resolvedRole === "admin" || resolvedRole === "owner") {
+          await fetchInvitations(orgId)
         } else {
-          setUserRole(null)
+          setInvitations([])
         }
       } catch {
         setUserRole("member")
+        setInvitations([])
       } finally {
         setRoleLoading(false)
       }
     },
-    [fetchMembers]
+    [fetchMembers, fetchInvitations]
   )
 
   // Sync state with currentOrg
@@ -185,12 +247,15 @@ export function SettingsPage() {
       setSaveSuccess(false)
       setIsAddingMember(false)
       setRemovingMember(null)
+      setIsCreatingInvitation(false)
+      setRevokingInvitation(null)
       resolveRole(currentOrg.id)
     }
   }, [currentOrg, resolveRole])
 
   const canEditOrg = userRole === "admin" || userRole === "owner"
   const canManageMembers = userRole === "admin" || userRole === "owner"
+  const canManageInvitations = userRole === "admin" || userRole === "owner"
   const isOwner = userRole === "owner"
 
   const handleStartEdit = () => {
@@ -386,10 +451,74 @@ export function SettingsPage() {
     }
   }
 
-  const copyToClipboard = (text: string) => {
+  // --- Invitation Handlers ---
+
+  const handleCreateInvitation = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!org) return
+
+    const trimmedEmail = inviteEmail.trim().toLowerCase()
+    if (!trimmedEmail) {
+      setCreateInviteError("Recipient email address is required.")
+      return
+    }
+
+    setCreatingInvitation(true)
+    setCreateInviteError(null)
+
+    try {
+      const newInvite = await api.createOrganizationInvitation(org.id, {
+        email: trimmedEmail,
+        role: inviteRole,
+      })
+
+      setInvitations((prev) => [newInvite, ...prev])
+      setInviteEmail("")
+      setInviteRole("member")
+      setIsCreatingInvitation(false)
+      showToast("Invitation sent successfully", "success")
+    } catch (err: unknown) {
+      const msg =
+        err instanceof ApiClientError
+          ? err.detail
+          : err instanceof Error
+          ? err.message
+          : "Failed to create invitation."
+      setCreateInviteError(msg)
+      showToast(msg, "error")
+    } finally {
+      setCreatingInvitation(false)
+    }
+  }
+
+  const handleConfirmRevokeInvitation = async () => {
+    if (!org || !revokingInvitation) return
+
+    setConfirmRevoking(true)
+    try {
+      await api.revokeOrganizationInvitation(org.id, revokingInvitation.id)
+      setInvitations((prev) =>
+        prev.map((inv) => (inv.id === revokingInvitation.id ? { ...inv, status: "revoked" } : inv))
+      )
+      showToast("Invitation revoked successfully", "success")
+      setRevokingInvitation(null)
+    } catch (err: unknown) {
+      const msg =
+        err instanceof ApiClientError
+          ? err.detail
+          : err instanceof Error
+          ? err.message
+          : "Failed to revoke invitation."
+      showToast(msg, "error")
+    } finally {
+      setConfirmRevoking(false)
+    }
+  }
+
+  const copyToClipboard = (text: string, label = "Item") => {
     navigator.clipboard.writeText(text)
     setCopiedId(text)
-    showToast("User ID copied to clipboard", "info")
+    showToast(`${label} copied to clipboard`, "info")
     setTimeout(() => {
       setCopiedId((current) => (current === text ? null : current))
     }, 2000)
@@ -435,15 +564,21 @@ export function SettingsPage() {
       <PageHeader
         eyebrow="System"
         title="Settings"
-        description="Manage organizational metadata, identifiers, and team membership access control."
+        description="Manage organizational metadata, identifiers, team membership, and access invitations."
         actions={
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
               size="sm"
               onClick={handleRefresh}
-              disabled={loading || saving || membersLoading}
-              leftIcon={<RefreshCw className={`h-3.5 w-3.5 ${loading || membersLoading ? "animate-spin" : ""}`} />}
+              disabled={loading || saving || membersLoading || invitationsLoading}
+              leftIcon={
+                <RefreshCw
+                  className={`h-3.5 w-3.5 ${
+                    loading || membersLoading || invitationsLoading ? "animate-spin" : ""
+                  }`}
+                />
+              }
             >
               Refresh
             </Button>
@@ -834,7 +969,7 @@ export function SettingsPage() {
                               </code>
                               <button
                                 type="button"
-                                onClick={() => copyToClipboard(member.user_id)}
+                                onClick={() => copyToClipboard(member.user_id, "User ID")}
                                 title="Copy User UUID"
                                 className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
                               >
@@ -981,6 +1116,333 @@ export function SettingsPage() {
             </div>
           )}
         </Card>
+
+        {/* Organization Invitations Card (Gated to Admin / Owner) */}
+        {canManageInvitations && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <Mail className="h-4 w-4 text-primary" />
+                  <CardTitle>Organization Invitations</CardTitle>
+                  {!invitationsLoading && (
+                    <Badge variant="neutral" size="sm">
+                      {invitations.length} {invitations.length === 1 ? "invitation" : "invitations"}
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {!isCreatingInvitation && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setIsCreatingInvitation(true)
+                        setCreateInviteError(null)
+                      }}
+                      leftIcon={<Send className="h-3.5 w-3.5" />}
+                    >
+                      Invite Member
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <CardDescription>
+                Pending and processed email invitations for new team members to join this organization.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              {/* Invite Member Form (inline expandable) */}
+              {isCreatingInvitation && (
+                <form
+                  onSubmit={handleCreateInvitation}
+                  className="p-4 rounded-lg bg-surface-2 border border-border/80 space-y-4 mb-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-mono font-medium text-foreground flex items-center gap-1.5">
+                      <Send className="h-3.5 w-3.5 text-primary" />
+                      Send Organization Invitation
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsCreatingInvitation(false)}
+                      disabled={creatingInvitation}
+                      className="h-6 w-6 p-0"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+
+                  {createInviteError && (
+                    <div className="p-3 rounded-md bg-status-error/10 border border-status-error/30 text-xs font-mono text-status-error">
+                      {createInviteError}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
+                      <label htmlFor={inviteEmailInputId} className="block text-[11px] font-mono text-muted-foreground mb-1">
+                        Email Address <span className="text-status-error">*</span>
+                      </label>
+                      <input
+                        id={inviteEmailInputId}
+                        type="email"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        placeholder="colleague@example.com"
+                        required
+                        className="w-full rounded-md border border-border bg-surface-base px-3 py-1.5 text-xs text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 font-sans"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor={inviteRoleSelectId} className="block text-[11px] font-mono text-muted-foreground mb-1">
+                        Assigned Role
+                      </label>
+                      <select
+                        id={inviteRoleSelectId}
+                        value={inviteRole}
+                        onChange={(e) => setInviteRole(e.target.value as MembershipRole)}
+                        className="w-full rounded-md border border-border bg-surface-base px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 font-mono"
+                      >
+                        <option value="member">member</option>
+                        <option value="admin">admin</option>
+                        <option value="owner">owner</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsCreatingInvitation(false)}
+                      disabled={creatingInvitation}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      size="sm"
+                      isLoading={creatingInvitation}
+                      leftIcon={<Send className="h-3.5 w-3.5" />}
+                    >
+                      Send Invitation
+                    </Button>
+                  </div>
+                </form>
+              )}
+
+              {/* Error loading invitations */}
+              {invitationsError && (
+                <div className="p-3 rounded-md bg-status-error/10 border border-status-error/30 text-xs font-mono text-status-error flex items-center justify-between">
+                  <span>{invitationsError}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => org && fetchInvitations(org.id)}
+                    className="h-7 text-xs"
+                  >
+                    Retry
+                  </Button>
+                </div>
+              )}
+
+              {/* Loading state */}
+              {invitationsLoading ? (
+                <div className="space-y-3 py-2">
+                  <Skeleton className="h-12 w-full rounded" />
+                  <Skeleton className="h-12 w-full rounded" />
+                </div>
+              ) : invitations.length === 0 ? (
+                <EmptyState
+                  icon={<Mail className="h-5 w-5" />}
+                  title="No invitations found"
+                  description="There are currently no active or historical invitations sent for this organization."
+                />
+              ) : (
+                /* Invitations Table */
+                <div className="overflow-x-auto rounded-md border border-border/80">
+                  <table className="w-full min-w-[700px] text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-border/80 bg-surface-2/60 text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+                        <th className="py-2.5 px-3 font-medium">Recipient Email</th>
+                        <th className="py-2.5 px-3 font-medium">Role</th>
+                        <th className="py-2.5 px-3 font-medium">Status</th>
+                        <th className="py-2.5 px-3 font-medium">Token</th>
+                        <th className="py-2.5 px-3 font-medium">Created / Expires</th>
+                        <th className="py-2.5 px-3 font-medium text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60 text-xs font-mono">
+                      {invitations.map((inv) => {
+                        const isPending = inv.status === "pending"
+                        const isRevocable = isPending
+
+                        return (
+                          <tr
+                            key={inv.id}
+                            className="transition-colors hover:bg-surface-2/40"
+                          >
+                            {/* Email column */}
+                            <td className="py-3 px-3 font-sans text-foreground">
+                              <div className="flex items-center gap-1.5 font-medium">
+                                <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                <span>{inv.email}</span>
+                              </div>
+                            </td>
+
+                            {/* Role column */}
+                            <td className="py-3 px-3">
+                              <Badge
+                                variant={
+                                  inv.role === "owner"
+                                    ? "primary"
+                                    : inv.role === "admin"
+                                    ? "success"
+                                    : "neutral"
+                                }
+                                size="sm"
+                              >
+                                {inv.role}
+                              </Badge>
+                            </td>
+
+                            {/* Status column */}
+                            <td className="py-3 px-3">
+                              <Badge
+                                variant={
+                                  inv.status === "accepted"
+                                    ? "success"
+                                    : inv.status === "pending"
+                                    ? "warning"
+                                    : inv.status === "expired"
+                                    ? "neutral"
+                                    : "error"
+                                }
+                                size="sm"
+                              >
+                                {inv.status}
+                              </Badge>
+                            </td>
+
+                            {/* Token column with copy */}
+                            <td className="py-3 px-3">
+                              <div className="flex items-center gap-1.5">
+                                <KeyRound className="h-3 w-3 text-muted-foreground shrink-0" />
+                                <code className="text-[11px] text-muted-foreground font-mono truncate max-w-[100px]" title={inv.token}>
+                                  {inv.token.slice(0, 10)}...
+                                </code>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(inv.token, "Invitation Token")}
+                                  title="Copy Invitation Token"
+                                  className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded"
+                                >
+                                  {copiedId === inv.token ? (
+                                    <Check className="h-3 w-3 text-status-success" />
+                                  ) : (
+                                    <Copy className="h-3 w-3" />
+                                  )}
+                                </button>
+                              </div>
+                            </td>
+
+                            {/* Created / Expires */}
+                            <td className="py-3 px-3 text-muted-foreground text-[11px]">
+                              <div>Created: {formatDateTime(inv.created_at)}</div>
+                              <div className="text-[10px] text-muted-foreground/70 flex items-center gap-1 mt-0.5">
+                                <Clock className="h-2.5 w-2.5" />
+                                Expires: {formatDateTime(inv.expires_at)}
+                              </div>
+                            </td>
+
+                            {/* Actions column */}
+                            <td className="py-3 px-3 text-right">
+                              {isRevocable ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setRevokingInvitation(inv)}
+                                  className="h-7 px-2 text-status-error hover:bg-status-error/10 hover:text-status-error"
+                                  title="Revoke invitation"
+                                  leftIcon={<Ban className="h-3.5 w-3.5" />}
+                                >
+                                  Revoke
+                                </Button>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground/50 italic select-none">
+                                  {inv.status === "accepted" ? "Accepted" : "Inactive"}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+
+            {/* Revoke Invitation Confirmation Modal */}
+            {revokingInvitation && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+                <div className="w-full max-w-md rounded-lg border border-border bg-surface-1 p-5 shadow-2xl space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-full bg-status-error/10 text-status-error">
+                      <Ban className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">Revoke Organization Invitation</h3>
+                      <p className="text-xs text-muted-foreground">Cancel pending access grant</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-xs text-foreground bg-surface-2 p-3 rounded border border-border/70 font-mono">
+                    <div>
+                      <span className="text-muted-foreground">Recipient Email:</span> {revokingInvitation.email}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Assigned Role:</span> {revokingInvitation.role}
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Once revoked, the recipient will no longer be able to use the invitation token to join this organization.
+                  </p>
+
+                  <div className="flex items-center justify-end gap-2.5 pt-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setRevokingInvitation(null)}
+                      disabled={confirmRevoking}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={handleConfirmRevokeInvitation}
+                      isLoading={confirmRevoking}
+                      className="bg-status-error hover:bg-status-error/90 text-white"
+                    >
+                      Revoke Invitation
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
       </div>
     </PageContainer>
   )
