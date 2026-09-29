@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useId } from "react"
+import { useNavigate } from "react-router-dom"
 import {
   Building2,
   Edit3,
@@ -15,6 +16,7 @@ import {
   Copy,
   Check,
   AlertTriangle,
+  AlertOctagon,
 } from "lucide-react"
 import { PageHeader, PageContainer } from "../components/ui/PageHeader"
 import { Button } from "../components/ui/Button"
@@ -64,7 +66,8 @@ function parseJwt(token: string): Record<string, unknown> | null {
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export function SettingsPage() {
-  const { currentOrg, isLoading: orgLoading, reloadOrganizations } = useOrganization()
+  const navigate = useNavigate()
+  const { currentOrg, organizations, isLoading: orgLoading, reloadOrganizations, selectOrganization } = useOrganization()
 
   const [org, setOrg] = useState<Organization | null>(currentOrg)
   const [loading, setLoading] = useState(false)
@@ -103,6 +106,12 @@ export function SettingsPage() {
   const [removingMember, setRemovingMember] = useState<MembershipResponse | null>(null)
   const [confirmRemoving, setConfirmRemoving] = useState(false)
 
+  // Danger Zone / Delete Organization state
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [deleteConfirmationSlug, setDeleteConfirmationSlug] = useState("")
+  const [deletingOrg, setDeletingOrg] = useState(false)
+  const [deleteOrgError, setDeleteOrgError] = useState<string | null>(null)
+
   // Copied User ID feedback
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
@@ -112,6 +121,7 @@ export function SettingsPage() {
   const descInputId = useId()
   const newUserIdInputId = useId()
   const newRoleSelectId = useId()
+  const deleteConfirmInputId = useId()
 
   const fetchMembers = useCallback(async (orgId: string) => {
     setMembersLoading(true)
@@ -185,6 +195,9 @@ export function SettingsPage() {
       setSaveSuccess(false)
       setIsAddingMember(false)
       setRemovingMember(null)
+      setIsDeleteModalOpen(false)
+      setDeleteConfirmationSlug("")
+      setDeleteOrgError(null)
       resolveRole(currentOrg.id)
     }
   }, [currentOrg, resolveRole])
@@ -386,6 +399,59 @@ export function SettingsPage() {
     }
   }
 
+  // --- Danger Zone / Delete Organization Handler ---
+
+  const handleDeleteOrganization = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!org || !isOwner) return
+
+    if (deleteConfirmationSlug !== org.slug) {
+      setDeleteOrgError(`Please enter the exact organization slug "${org.slug}" to confirm deletion.`)
+      return
+    }
+
+    setDeletingOrg(true)
+    setDeleteOrgError(null)
+
+    try {
+      const deletedOrgId = org.id
+      await api.deleteOrganization(deletedOrgId)
+      showToast(`Organization "${org.name}" was permanently deleted.`, "success")
+
+      // Clear local storage key if it references deleted org
+      const savedId = localStorage.getItem("orq_selected_org_id")
+      if (savedId === deletedOrgId) {
+        localStorage.removeItem("orq_selected_org_id")
+      }
+
+      setIsDeleteModalOpen(false)
+      setDeleteConfirmationSlug("")
+
+      // Reload global organizations
+      await reloadOrganizations()
+
+      // Find remaining organizations
+      const remaining = organizations.filter((o) => o.id !== deletedOrgId)
+      if (remaining.length > 0) {
+        selectOrganization(remaining[0].id)
+        navigate("/app")
+      } else {
+        setOrg(null)
+      }
+    } catch (err: unknown) {
+      const msg =
+        err instanceof ApiClientError
+          ? err.detail
+          : err instanceof Error
+          ? err.message
+          : "Failed to delete organization."
+      setDeleteOrgError(msg)
+      showToast(msg, "error")
+    } finally {
+      setDeletingOrg(false)
+    }
+  }
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
     setCopiedId(text)
@@ -442,7 +508,7 @@ export function SettingsPage() {
               variant="ghost"
               size="sm"
               onClick={handleRefresh}
-              disabled={loading || saving || membersLoading}
+              disabled={loading || saving || membersLoading || deletingOrg}
               leftIcon={<RefreshCw className={`h-3.5 w-3.5 ${loading || membersLoading ? "animate-spin" : ""}`} />}
             >
               Refresh
@@ -981,6 +1047,136 @@ export function SettingsPage() {
             </div>
           )}
         </Card>
+
+        {/* Danger Zone Card (Owner Only) */}
+        {isOwner && (
+          <Card className="border-status-error/30 bg-status-error/5">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <AlertOctagon className="h-4 w-4 text-status-error" />
+                  <CardTitle className="text-status-error">Danger Zone</CardTitle>
+                </div>
+                <Badge variant="error" size="sm">
+                  Owner Only
+                </Badge>
+              </div>
+              <CardDescription>
+                Irreversible administrative actions for this organization workspace and its associated resources.
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg bg-surface-base border border-status-error/20">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-semibold text-foreground">Delete this organization</h4>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Permanently remove <span className="font-mono text-foreground font-medium">{org?.name}</span> ({org?.slug}), including all providers, models, API keys, member associations, and execution logs.
+                  </p>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    setIsDeleteModalOpen(true)
+                    setDeleteConfirmationSlug("")
+                    setDeleteOrgError(null)
+                  }}
+                  disabled={deletingOrg}
+                  className="bg-status-error hover:bg-status-error/90 text-white shrink-0"
+                  leftIcon={<Trash2 className="h-3.5 w-3.5" />}
+                >
+                  Delete Organization
+                </Button>
+              </div>
+            </CardContent>
+
+            {/* Delete Confirmation Modal */}
+            {isDeleteModalOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4">
+                <div className="w-full max-w-md rounded-lg border border-status-error/40 bg-surface-1 p-6 shadow-2xl space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-full bg-status-error/15 text-status-error shrink-0">
+                      <AlertOctagon className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-semibold text-foreground">Delete Organization</h3>
+                      <p className="text-xs text-muted-foreground">This action cannot be undone</p>
+                    </div>
+                  </div>
+
+                  {deleteOrgError && (
+                    <div className="p-3 rounded-md bg-status-error/10 border border-status-error/30 text-xs font-mono text-status-error">
+                      {deleteOrgError}
+                    </div>
+                  )}
+
+                  <div className="p-3.5 rounded-md bg-surface-2 border border-border/80 text-xs space-y-2 text-foreground">
+                    <p className="font-medium text-status-error flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      Warning: Cascading deletion
+                    </p>
+                    <p className="text-muted-foreground leading-relaxed">
+                      All provider configurations, active API keys, team memberships, invitations, and execution audit history will be permanently deleted from the database.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleDeleteOrganization} className="space-y-4 pt-1">
+                    <div>
+                      <label
+                        htmlFor={deleteConfirmInputId}
+                        className="block text-xs font-mono text-foreground mb-1.5"
+                      >
+                        Type organization slug <span className="font-bold text-status-error">"{org?.slug}"</span> to confirm:
+                      </label>
+                      <input
+                        id={deleteConfirmInputId}
+                        type="text"
+                        value={deleteConfirmationSlug}
+                        onChange={(e) => {
+                          setDeleteConfirmationSlug(e.target.value.trim())
+                          setDeleteOrgError(null)
+                        }}
+                        placeholder={org?.slug}
+                        autoComplete="off"
+                        required
+                        disabled={deletingOrg}
+                        className="w-full rounded-md border border-border bg-surface-base px-3 py-2 text-sm font-mono text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-status-error/60 focus:border-status-error/60"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2.5 pt-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setIsDeleteModalOpen(false)
+                          setDeleteConfirmationSlug("")
+                          setDeleteOrgError(null)
+                        }}
+                        disabled={deletingOrg}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        size="sm"
+                        isLoading={deletingOrg}
+                        disabled={deleteConfirmationSlug !== org?.slug || deletingOrg}
+                        className="bg-status-error hover:bg-status-error/90 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                        leftIcon={<Trash2 className="h-3.5 w-3.5" />}
+                      >
+                        Permanently Delete
+                      </Button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
       </div>
     </PageContainer>
   )
