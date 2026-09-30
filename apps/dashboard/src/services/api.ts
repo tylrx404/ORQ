@@ -111,6 +111,38 @@ export const api = {
   },
 
   /**
+   * Delete an organization (requires owner).
+   */
+  async deleteOrganization(organizationId: string): Promise<void> {
+    const token = localStorage.getItem("orq_access_token")
+    const headers = new Headers()
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`)
+    }
+    headers.set("X-Organization-Id", organizationId)
+
+    const res = await fetch(`${API_BASE_URL}/organizations/${organizationId}`, {
+      method: "DELETE",
+      headers,
+    })
+
+    if (!res.ok) {
+      let errorDetail = `HTTP ${res.status}: ${res.statusText}`
+      try {
+        const data = await res.json()
+        if (data?.detail) {
+          errorDetail = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)
+        } else if (data?.message) {
+          errorDetail = data.message
+        }
+      } catch {
+        // Response was not JSON
+      }
+      throw new ApiClientError(res.status, errorDetail)
+    }
+  },
+
+  /**
    * List members of an organization.
    */
   async listOrganizationMembers(
