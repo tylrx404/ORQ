@@ -6,5 +6,5 @@ export interface OrganizationContextType {
   isLoading: boolean
   error: string | null
   selectOrganization: (orgId: string) => void
-  reloadOrganizations: () => Promise<void>
+  reloadOrganizations: () => Promise<Organization[]>
 }

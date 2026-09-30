@@ -7,7 +7,7 @@ export const OrganizationContext = createContext<OrganizationContextType>({
   isLoading: true,
   error: null,
   selectOrganization: () => {},
-  reloadOrganizations: async () => {},
+  reloadOrganizations: async () => [],
 })
 
 export function useOrganization() {

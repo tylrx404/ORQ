@@ -11,11 +11,15 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
   const [isLoading, setIsLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
 
-  const loadOrgs = React.useCallback(async () => {
+  const orgsRef = React.useRef<Organization[]>([])
+  orgsRef.current = organizations
+
+  const loadOrgs = React.useCallback(async (): Promise<Organization[]> => {
     setIsLoading(true)
     setError(null)
     try {
       const orgs = await api.listOrganizations()
+      orgsRef.current = orgs
       setOrganizations(orgs)
 
       if (orgs.length > 0) {
@@ -27,9 +31,11 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
       } else {
         setCurrentOrg(null)
       }
+      return orgs
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load organizations"
       setError(msg)
+      return []
     } finally {
       setIsLoading(false)
     }
@@ -41,7 +47,7 @@ export function OrganizationProvider({ children }: { children: React.ReactNode }
 
   const selectOrganization = React.useCallback(
     (orgId: string) => {
-      const org = organizations.find((o) => o.id === orgId)
+      const org = orgsRef.current.find((o) => o.id === orgId) || organizations.find((o) => o.id === orgId)
       if (org) {
         setCurrentOrg(org)
         localStorage.setItem(SELECTED_ORG_KEY, org.id)

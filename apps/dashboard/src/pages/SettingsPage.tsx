@@ -77,7 +77,7 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 
 export function SettingsPage() {
   const navigate = useNavigate()
-  const { currentOrg, organizations, isLoading: orgLoading, reloadOrganizations, selectOrganization } = useOrganization()
+  const { currentOrg, isLoading: orgLoading, reloadOrganizations, selectOrganization } = useOrganization()
 
   const [org, setOrg] = useState<Organization | null>(currentOrg)
   const [loading, setLoading] = useState(false)
@@ -557,10 +557,10 @@ export function SettingsPage() {
       setDeleteConfirmationSlug("")
 
       // Reload global organizations
-      await reloadOrganizations()
+      const refreshedOrgs = await reloadOrganizations()
 
       // Find remaining organizations
-      const remaining = organizations.filter((o) => o.id !== deletedOrgId)
+      const remaining = refreshedOrgs.filter((o) => o.id !== deletedOrgId)
       if (remaining.length > 0) {
         selectOrganization(remaining[0].id)
         navigate("/app")
