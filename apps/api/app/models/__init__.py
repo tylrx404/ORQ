@@ -17,5 +17,18 @@ from app.models.provider_model import ProviderModel
 from app.models.api_key import ApiKey
 from app.models.execution_log import ExecutionLog
 from app.models.organization_quota import OrganizationQuota
+from app.models.prompt import Prompt, PromptVersion
 
-__all__ = ["User", "Organization", "OrganizationMembership", "OrganizationInvitation", "Provider", "ProviderModel", "ApiKey", "ExecutionLog", "OrganizationQuota"]
+__all__ = [
+    "User",
+    "Organization",
+    "OrganizationMembership",
+    "OrganizationInvitation",
+    "Provider",
+    "ProviderModel",
+    "ApiKey",
+    "ExecutionLog",
+    "OrganizationQuota",
+    "Prompt",
+    "PromptVersion",
+]

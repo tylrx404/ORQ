@@ -41,6 +41,9 @@ from app.services.usage import UsageService
 from app.services.rate_limit import RateLimitService
 from app.services.organization_quota import OrganizationQuotaService
 from app.repositories.organization_quota_repository import OrganizationQuotaRepository
+from app.models.prompt import Prompt, PromptVersion
+from app.repositories.prompt_repository import PromptRepository, PromptVersionRepository
+from app.services.prompt import PromptService
 from app.redis.client import redis_manager
 
 # ---------------------------------------------------------------------------
@@ -535,3 +538,79 @@ def get_organization_quota_service(
 ) -> OrganizationQuotaService:
     """Provide an OrganizationQuotaService instance."""
     return OrganizationQuotaService(repo)
+
+
+def get_prompt_repository(db: AsyncSession = Depends(get_db)) -> PromptRepository:
+    """Provide a PromptRepository instance."""
+    return PromptRepository(db)
+
+
+def get_prompt_version_repository(db: AsyncSession = Depends(get_db)) -> PromptVersionRepository:
+    """Provide a PromptVersionRepository instance."""
+    return PromptVersionRepository(db)
+
+
+def get_prompt_service(
+    prompt_repository: PromptRepository = Depends(get_prompt_repository),
+    prompt_version_repository: PromptVersionRepository = Depends(get_prompt_version_repository),
+) -> PromptService:
+    """Provide a PromptService instance."""
+    return PromptService(prompt_repository, prompt_version_repository)
+
+
+async def require_prompt_member(
+    prompt_id: UUID = Path(...),
+    current_user: User = Depends(get_current_user),
+    prompt_repo: PromptRepository = Depends(get_prompt_repository),
+    membership_repo: OrganizationMembershipRepository = Depends(get_organization_membership_repository),
+) -> Prompt:
+    """Ensure the user is a member of the organization owning the prompt."""
+    prompt = await prompt_repo.get_by_id(prompt_id)
+    if not prompt:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prompt not found.",
+        )
+
+    membership = await membership_repo.get_membership(prompt.organization_id, current_user.id)
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization membership not found.",
+        )
+
+    if not has_permission(membership.role, Permission.VIEW_MEMBERS):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. Requires member role.",
+        )
+    return prompt
+
+
+async def require_prompt_admin(
+    prompt_id: UUID = Path(...),
+    current_user: User = Depends(get_current_user),
+    prompt_repo: PromptRepository = Depends(get_prompt_repository),
+    membership_repo: OrganizationMembershipRepository = Depends(get_organization_membership_repository),
+) -> Prompt:
+    """Ensure the user has admin/owner permissions for the organization owning the prompt."""
+    prompt = await prompt_repo.get_by_id(prompt_id)
+    if not prompt:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prompt not found.",
+        )
+
+    membership = await membership_repo.get_membership(prompt.organization_id, current_user.id)
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization membership not found.",
+        )
+
+    if not has_permission(membership.role, Permission.UPDATE_ORGANIZATION):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. Requires admin or owner role.",
+        )
+    return prompt

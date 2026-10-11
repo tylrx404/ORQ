@@ -19,6 +19,7 @@ from app.api.v1.endpoints import (
     provider_models,
     providers,
     ready,
+    registry,
     users,
     version,
 )
@@ -87,6 +88,9 @@ api_router.include_router(
     chat_completions.router, prefix="/chat/completions", tags=["chat completions"]
 )
 api_router.include_router(users.router, prefix="/users", tags=["users"])
+api_router.include_router(
+    registry.router, prefix="/registry", tags=["prompt registry"]
+)
 api_router.include_router(health.router, prefix="/health", tags=["system"])
 api_router.include_router(ready.router, prefix="/ready", tags=["system"])
 api_router.include_router(version.router, prefix="/version", tags=["system"])
