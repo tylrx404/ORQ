@@ -21,6 +21,7 @@ export interface TopNavProps {
 const ROUTE_NAMES: Record<string, string> = {
   "/app": "Overview",
   "/app/playground": "Playground",
+  "/app/prompts": "Prompts",
   "/app/models": "Models",
   "/app/providers": "Providers",
   "/app/api-keys": "API Keys",

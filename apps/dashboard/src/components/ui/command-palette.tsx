@@ -17,6 +17,7 @@ interface CommandItem {
 const COMMAND_ITEMS: CommandItem[] = [
   { name: "Overview", path: "/app", category: "Core" },
   { name: "Playground", path: "/app/playground", category: "Core" },
+  { name: "Prompts", path: "/app/prompts", category: "Core" },
   { name: "Models", path: "/app/models", category: "Infrastructure" },
   { name: "Providers", path: "/app/providers", category: "Infrastructure" },
   { name: "API Keys", path: "/app/api-keys", category: "Infrastructure" },
