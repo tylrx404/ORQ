@@ -3,6 +3,7 @@ import { GlobalLayout } from "./layouts/GlobalLayout"
 import { LandingPage } from "./pages/LandingPage"
 import { OverviewPage } from "./pages/OverviewPage"
 import { PlaygroundPage } from "./pages/PlaygroundPage"
+import { PromptsPage } from "./pages/PromptsPage"
 import { ProvidersPage } from "./pages/ProvidersPage"
 import { ModelsPage } from "./pages/ModelsPage"
 import { ApiKeysPage } from "./pages/ApiKeysPage"
@@ -37,6 +38,15 @@ export default function App() {
           element={
             <GlobalLayout>
               <PlaygroundPage />
+            </GlobalLayout>
+          }
+        />
+
+        <Route
+          path="/app/prompts"
+          element={
+            <GlobalLayout>
+              <PromptsPage />
             </GlobalLayout>
           }
         />

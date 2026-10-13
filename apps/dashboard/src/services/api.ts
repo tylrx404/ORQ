@@ -19,6 +19,8 @@ import type {
   ApiKeyCreateResponse,
   ApiKeyResponse,
   ApiKeyUpdateRequest,
+  PromptResponse,
+  PromptCreateRequest,
 } from "../types/api"
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api/v1"
@@ -557,6 +559,45 @@ export const api = {
       }
       throw new ApiClientError(res.status, errorDetail)
     }
+  },
+
+  /**
+   * List prompts for an organization.
+   */
+  async listPrompts(organizationId: string, skip = 0, limit = 100): Promise<PromptResponse[]> {
+    return fetchJson<PromptResponse[]>(
+      `${API_BASE_URL}/registry/prompts?organization_id=${organizationId}&skip=${skip}&limit=${limit}`,
+      {
+        headers: {
+          "X-Organization-Id": organizationId,
+        },
+      }
+    )
+  },
+
+  /**
+   * Create a prompt (and its initial version 1) for an organization.
+   */
+  async createPrompt(organizationId: string, request: PromptCreateRequest): Promise<PromptResponse> {
+    return fetchJson<PromptResponse>(
+      `${API_BASE_URL}/registry/prompts?organization_id=${organizationId}`,
+      {
+        method: "POST",
+        headers: {
+          "X-Organization-Id": organizationId,
+        },
+        body: JSON.stringify(request),
+      }
+    )
+  },
+
+  /**
+   * Get a prompt by ID.
+   */
+  async getPrompt(promptId: string): Promise<PromptResponse> {
+    return fetchJson<PromptResponse>(
+      `${API_BASE_URL}/registry/prompts/${promptId}`
+    )
   },
 }
 

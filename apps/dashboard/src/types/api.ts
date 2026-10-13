@@ -210,3 +210,25 @@ export interface ApiKeyResponse {
 export interface ApiKeyCreateResponse extends ApiKeyResponse {
   key: string
 }
+
+export interface PromptResponse {
+  id: string
+  organization_id: string
+  name: string
+  description?: string | null
+  published_version_id?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PromptCreateRequest {
+  name: string
+  description?: string | null
+  initial_content: string
+  organization_id?: string | null
+}
+
+export interface PromptUpdateRequest {
+  name?: string
+  description?: string | null
+}

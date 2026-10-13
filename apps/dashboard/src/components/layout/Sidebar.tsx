@@ -3,6 +3,7 @@ import { NavLink, Link } from "react-router-dom"
 import {
   LayoutDashboard,
   Terminal,
+  FileText,
   Cpu,
   Server,
   Key,
@@ -32,6 +33,7 @@ const NAVIGATION_GROUPS: NavGroupConfig[] = [
     items: [
       { name: "Overview", to: "/app", icon: LayoutDashboard },
       { name: "Playground", to: "/app/playground", icon: Terminal },
+      { name: "Prompts", to: "/app/prompts", icon: FileText },
     ],
   },
   {
