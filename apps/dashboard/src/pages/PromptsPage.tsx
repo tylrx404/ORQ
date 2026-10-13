@@ -49,7 +49,12 @@ export function PromptsPage() {
   const [formError, setFormError] = useState<string | null>(null)
 
   const fetchPrompts = useCallback(async () => {
-    if (!currentOrg) return
+    if (!currentOrg) {
+      setLoading(false)
+      setPrompts([])
+      setError(null)
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -148,10 +153,10 @@ export function PromptsPage() {
               variant="outline"
               size="sm"
               onClick={fetchPrompts}
-              disabled={loading}
+              disabled={loading || orgLoading}
               title="Refresh prompt list"
             >
-              <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${loading || orgLoading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
             <Button variant="primary" size="sm" onClick={openCreate}>
@@ -180,7 +185,7 @@ export function PromptsPage() {
       </div>
 
       {/* --- Main Content / States --- */}
-      {loading && prompts.length === 0 ? (
+      {(loading || orgLoading) && prompts.length === 0 ? (
         <div className="space-y-3 mt-2">
           {[1, 2, 3].map((i) => (
             <div key={i} className="p-5 surface-card rounded-lg border border-border space-y-3">
