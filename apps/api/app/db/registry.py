@@ -27,6 +27,7 @@ Adding a new model
 
 # ruff: noqa: F401  (imports are intentional side-effects)
 from app.db.base import Base  # noqa: F401
+from app.models.agent_spec import AgentSpec  # noqa: F401
 from app.models.user import User  # noqa: F401
 
-__all__ = ["Base", "User"]
+__all__ = ["AgentSpec", "Base", "User"]
