@@ -18,6 +18,7 @@ from app.models.api_key import ApiKey
 from app.models.execution_log import ExecutionLog
 from app.models.organization_quota import OrganizationQuota
 from app.models.prompt import Prompt, PromptVersion
+from app.models.agent_spec import AgentSpec
 
 __all__ = [
     "User",
@@ -31,4 +32,5 @@ __all__ = [
     "OrganizationQuota",
     "Prompt",
     "PromptVersion",
+    "AgentSpec",
 ]
