@@ -28,6 +28,29 @@ Adding a new model
 # ruff: noqa: F401  (imports are intentional side-effects)
 from app.db.base import Base  # noqa: F401
 from app.models.agent_spec import AgentSpec  # noqa: F401
+from app.models.api_key import ApiKey  # noqa: F401
+from app.models.execution_log import ExecutionLog  # noqa: F401
+from app.models.organization import Organization  # noqa: F401
+from app.models.organization_invitation import OrganizationInvitation  # noqa: F401
+from app.models.organization_membership import OrganizationMembership  # noqa: F401
+from app.models.organization_quota import OrganizationQuota  # noqa: F401
+from app.models.prompt import Prompt, PromptVersion  # noqa: F401
+from app.models.provider import Provider  # noqa: F401
+from app.models.provider_model import ProviderModel  # noqa: F401
 from app.models.user import User  # noqa: F401
 
-__all__ = ["AgentSpec", "Base", "User"]
+__all__ = [
+    "AgentSpec",
+    "ApiKey",
+    "Base",
+    "ExecutionLog",
+    "Organization",
+    "OrganizationInvitation",
+    "OrganizationMembership",
+    "OrganizationQuota",
+    "Prompt",
+    "PromptVersion",
+    "Provider",
+    "ProviderModel",
+    "User",
+]
