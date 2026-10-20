@@ -55,8 +55,8 @@ class AgentSpecVersionRepository:
         return result.scalars().all()
 
     async def create(self, version: AgentSpecVersion) -> AgentSpecVersion:
-        """Persist an immutable agent spec version."""
+        """Persist an immutable agent spec version without committing the transaction."""
         self.db.add(version)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(version)
         return version

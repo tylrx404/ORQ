@@ -170,15 +170,23 @@ def test_agent_spec_version_model_instantiation_and_relationships():
     agent.current_version_id = version.id
     assert agent.current_version_number == 1
 
-    # If current_version_id is None, current_version_number returns None safely
-    agent.current_version_id = None
+    # Mismatched loaded current_version relationship must not return stale version number
+    other_version_id = uuid4()
+    agent.current_version_id = other_version_id
     assert agent.current_version_number is None
 
-    # Manual property override
-    agent.current_version_id = version_id
+    # Cache association with current_version_id
     agent.current_version = None
     agent.current_version_number = 3
     assert agent.current_version_number == 3
+
+    # Changing current_version_id invalidates cached version number
+    agent.current_version_id = uuid4()
+    assert agent.current_version_number is None
+
+    # If current_version_id is None, current_version_number returns None safely
+    agent.current_version_id = None
+    assert agent.current_version_number is None
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +417,8 @@ class MockAsyncSession:
     def __init__(self):
         self.items: dict[UUID, AgentSpec] = {}
         self.versions: dict[UUID, AgentSpecVersion] = {}
+        self.committed = False
+        self.flushed = False
 
     def add(self, obj: Any):
         if isinstance(obj, AgentSpecVersion):
@@ -422,8 +432,11 @@ class MockAsyncSession:
                 obj.updated_at = datetime.now(timezone.utc)
             self.items[obj.id] = obj
 
+    async def flush(self):
+        self.flushed = True
+
     async def commit(self):
-        pass
+        self.committed = True
 
     async def refresh(self, obj: Any):
         pass
@@ -520,6 +533,7 @@ async def test_agent_spec_repository_in_memory():
     created = await repo.create(spec)
     assert created.id == agent_id
     assert agent_id in session.items
+    assert session.committed is True
 
     # 2. Update
     created.name = "Repo Test Agent Updated"
@@ -576,9 +590,17 @@ async def test_agent_spec_version_repository_in_memory():
         memory_policy={},
     )
 
-    await repo.create(v1_a)
+    assert session.flushed is False
+    assert session.committed is False
+
+    created_v1 = await repo.create(v1_a)
+    assert session.flushed is True
+    assert session.committed is False
+    assert created_v1.id == v1_a.id
+
     await repo.create(v2_a)
     await repo.create(v1_b)
+    assert session.committed is False
 
     # 3. Latest version number per agent
     assert await repo.get_latest_version_number(agent_a) == 2

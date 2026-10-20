@@ -146,15 +146,22 @@ class AgentSpec(Base):
             state = inspect(self)
             if state is not None and "current_version" in state.dict:
                 cv = state.dict["current_version"]
-                if cv is not None:
+                if cv is not None and getattr(cv, "id", None) == self.current_version_id:
                     return getattr(cv, "version_number", None)
         except Exception:
             pass
-        return getattr(self, "_current_version_number", None)
+
+        cached = getattr(self, "_cached_version_info", None)
+        if cached is not None and cached[0] == self.current_version_id:
+            return cached[1]
+        return None
 
     @current_version_number.setter
     def current_version_number(self, value: int | None) -> None:
-        self._current_version_number = value
+        if value is None or self.current_version_id is None:
+            self._cached_version_info = None
+        else:
+            self._cached_version_info = (self.current_version_id, value)
 
     def __repr__(self) -> str:
         return f"<AgentSpec id={self.id} org={self.organization_id} name={self.name}>"
