@@ -42,6 +42,8 @@ class AgentSpecResponse(BaseModel):
     organization_id: UUID
     name: str
     description: Optional[str]
+    current_version_id: Optional[UUID] = None
+    current_version_number: Optional[int] = None
     prompt_id: Optional[UUID]
     prompt_version_id: Optional[UUID]
     provider_id: Optional[UUID]
@@ -51,5 +53,31 @@ class AgentSpecResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AgentSpecVersionCreateRequest(BaseModel):
+    description: Optional[str] = Field(default=None, description="Optional version description or changelog")
+    prompt_id: Optional[UUID] = Field(default=None, description="Referenced prompt ID")
+    prompt_version_id: Optional[UUID] = Field(default=None, description="Referenced prompt version ID")
+    provider_id: Optional[UUID] = Field(default=None, description="Referenced provider ID")
+    model_id: Optional[UUID] = Field(default=None, description="Referenced provider model ID")
+    tool_identifiers: list[str] = Field(default_factory=list, description="Allowed tool identifiers")
+    memory_policy: dict[str, Any] = Field(default_factory=dict, description="Memory policy configuration")
+
+
+class AgentSpecVersionResponse(BaseModel):
+    id: UUID
+    agent_spec_id: UUID
+    version_number: int
+    description: Optional[str] = None
+    prompt_id: Optional[UUID] = None
+    prompt_version_id: Optional[UUID] = None
+    provider_id: Optional[UUID] = None
+    model_id: Optional[UUID] = None
+    tool_identifiers: list[str] = Field(default_factory=list)
+    memory_policy: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
