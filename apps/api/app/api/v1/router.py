@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
+    agent_specs,
     api_keys,
     auth,
     chat_completions,
@@ -77,6 +78,9 @@ api_router.include_router(
     organization_quota.router,
     prefix="/organizations/{organization_id}",
     tags=["organization quota"],
+)
+api_router.include_router(
+    agent_specs.router, prefix="/agents", tags=["agents"]
 )
 api_router.include_router(
     api_keys.router, prefix="/api-keys", tags=["api keys"]
