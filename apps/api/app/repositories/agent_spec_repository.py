@@ -60,6 +60,13 @@ class AgentSpecRepository:
         result = await self.db.execute(query)
         return result.scalars().all()
 
+    async def get_for_update(self, agent_id: UUID) -> AgentSpec | None:
+        """Fetch an agent spec locking the row for concurrent version updates."""
+        result = await self.db.execute(
+            select(AgentSpec).where(AgentSpec.id == agent_id).with_for_update()
+        )
+        return result.scalar_one_or_none()
+
     async def create(self, agent_spec: AgentSpec) -> AgentSpec:
         """Persist a new agent spec."""
         self.db.add(agent_spec)

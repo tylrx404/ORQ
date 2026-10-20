@@ -27,7 +27,7 @@ Adding a new model
 
 # ruff: noqa: F401  (imports are intentional side-effects)
 from app.db.base import Base  # noqa: F401
-from app.models.agent_spec import AgentSpec  # noqa: F401
+from app.models.agent_spec import AgentSpec, AgentSpecVersion  # noqa: F401
 from app.models.api_key import ApiKey  # noqa: F401
 from app.models.execution_log import ExecutionLog  # noqa: F401
 from app.models.organization import Organization  # noqa: F401
@@ -41,6 +41,7 @@ from app.models.user import User  # noqa: F401
 
 __all__ = [
     "AgentSpec",
+    "AgentSpecVersion",
     "ApiKey",
     "Base",
     "ExecutionLog",
