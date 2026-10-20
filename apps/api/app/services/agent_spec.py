@@ -85,8 +85,7 @@ class AgentSpecService:
                     f"Prompt version with ID '{prompt_version_id}' does not belong to this organization."
                 )
             prompt_id = version.prompt_id
-
-        if prompt_id is not None:
+        elif prompt_id is not None:
             prompt = await self._prompt_repo.get_by_id_and_org(organization_id, prompt_id)
             if not prompt:
                 raise InvalidPromptReferenceError(

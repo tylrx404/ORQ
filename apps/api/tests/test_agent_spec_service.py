@@ -536,6 +536,46 @@ async def test_update_agent_spec_clearing_references(service, repos):
 
 
 @pytest.mark.asyncio
+async def test_update_agent_spec_mismatched_model_provider_fails(service, repos):
+    """Verify updating model_id to a model belonging to a different provider, while retaining existing provider, raises InvalidModelReferenceError."""
+    org_id = uuid4()
+
+    p1_id = uuid4()
+    p2_id = uuid4()
+    repos["provider"].providers[p1_id] = Provider(
+        id=p1_id, organization_id=org_id, name="P1", provider_type=ProviderType.openai, api_key="k"
+    )
+    repos["provider"].providers[p2_id] = Provider(
+        id=p2_id, organization_id=org_id, name="P2", provider_type=ProviderType.anthropic, api_key="k"
+    )
+
+    m1_id = uuid4()
+    repos["model"].models[m1_id] = ProviderModel(
+        id=m1_id, provider_id=p1_id, name="M1", model_identifier="m1"
+    )
+
+    m2_id = uuid4()
+    repos["model"].models[m2_id] = ProviderModel(
+        id=m2_id, provider_id=p2_id, name="M2", model_identifier="m2"
+    )
+
+    agent = await service.create_agent_spec(
+        organization_id=org_id,
+        name="Agent",
+        provider_id=p1_id,
+        model_id=m1_id,
+    )
+
+    with pytest.raises(InvalidModelReferenceError) as exc_info:
+        await service.update_agent_spec(
+            organization_id=org_id,
+            agent_id=agent.id,
+            update_data={"model_id": m2_id},
+        )
+    assert f"Model with ID '{m2_id}' does not belong to provider '{p1_id}'." in str(exc_info.value)
+
+
+@pytest.mark.asyncio
 async def test_update_agent_spec_duplicate_name_fails(service):
     """Verify updating to an existing name in the same org raises DuplicateAgentSpecError."""
     org_id = uuid4()
