@@ -44,6 +44,9 @@ from app.repositories.organization_quota_repository import OrganizationQuotaRepo
 from app.models.prompt import Prompt, PromptVersion
 from app.repositories.prompt_repository import PromptRepository, PromptVersionRepository
 from app.services.prompt import PromptService
+from app.models.agent_spec import AgentSpec
+from app.repositories.agent_spec_repository import AgentSpecRepository
+from app.services.agent_spec import AgentSpecService
 from app.redis.client import redis_manager
 
 # ---------------------------------------------------------------------------
@@ -614,3 +617,83 @@ async def require_prompt_admin(
             detail="Not enough permissions. Requires admin or owner role.",
         )
     return prompt
+
+
+def get_agent_spec_repository(db: AsyncSession = Depends(get_db)) -> AgentSpecRepository:
+    """Provide an AgentSpecRepository instance."""
+    return AgentSpecRepository(db)
+
+
+def get_agent_spec_service(
+    agent_spec_repository: AgentSpecRepository = Depends(get_agent_spec_repository),
+    prompt_repository: PromptRepository = Depends(get_prompt_repository),
+    prompt_version_repository: PromptVersionRepository = Depends(get_prompt_version_repository),
+    provider_repository: ProviderRepository = Depends(get_provider_repository),
+    provider_model_repository: ProviderModelRepository = Depends(get_provider_model_repository),
+) -> AgentSpecService:
+    """Provide an AgentSpecService instance."""
+    return AgentSpecService(
+        agent_spec_repository=agent_spec_repository,
+        prompt_repository=prompt_repository,
+        prompt_version_repository=prompt_version_repository,
+        provider_repository=provider_repository,
+        provider_model_repository=provider_model_repository,
+    )
+
+
+async def require_agent_spec_member(
+    agent_id: UUID = Path(...),
+    current_user: User = Depends(get_current_user),
+    agent_spec_repo: AgentSpecRepository = Depends(get_agent_spec_repository),
+    membership_repo: OrganizationMembershipRepository = Depends(get_organization_membership_repository),
+) -> AgentSpec:
+    """Ensure the user is a member of the organization owning the agent spec."""
+    agent_spec = await agent_spec_repo.get_by_id(agent_id)
+    if not agent_spec:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent specification not found.",
+        )
+
+    membership = await membership_repo.get_membership(agent_spec.organization_id, current_user.id)
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent specification not found.",
+        )
+
+    if not has_permission(membership.role, Permission.VIEW_MEMBERS):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. Requires member role.",
+        )
+    return agent_spec
+
+
+async def require_agent_spec_admin(
+    agent_id: UUID = Path(...),
+    current_user: User = Depends(get_current_user),
+    agent_spec_repo: AgentSpecRepository = Depends(get_agent_spec_repository),
+    membership_repo: OrganizationMembershipRepository = Depends(get_organization_membership_repository),
+) -> AgentSpec:
+    """Ensure the user has admin/owner permissions for the organization owning the agent spec."""
+    agent_spec = await agent_spec_repo.get_by_id(agent_id)
+    if not agent_spec:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent specification not found.",
+        )
+
+    membership = await membership_repo.get_membership(agent_spec.organization_id, current_user.id)
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agent specification not found.",
+        )
+
+    if not has_permission(membership.role, Permission.UPDATE_ORGANIZATION):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. Requires admin or owner role.",
+        )
+    return agent_spec
