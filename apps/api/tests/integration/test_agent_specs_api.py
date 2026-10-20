@@ -719,3 +719,37 @@ async def test_invalid_payload_returns_422(mock_agent_api_deps):
         # PATCH with null for non-nullable field 'name'
         res_null_name = await ac.patch(f"/api/v1/agents/{agent_id}", json={"name": None})
         assert res_null_name.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_list_agent_specs_pagination_validation(mock_agent_api_deps):
+    """Confirm negative skip, limit=0, and limit=101 return 422, while valid pagination works."""
+    deps = mock_agent_api_deps
+    org_id = str(deps["org_a"])
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        # Populate test agents
+        await ac.post(f"/api/v1/agents?organization_id={org_id}", json={"name": "Agent Page 1"})
+        await ac.post(f"/api/v1/agents?organization_id={org_id}", json={"name": "Agent Page 2"})
+
+        # Negative skip -> 422
+        res_neg_skip = await ac.get(f"/api/v1/agents?organization_id={org_id}&skip=-1")
+        assert res_neg_skip.status_code == 422
+
+        # limit=0 -> 422
+        res_zero_limit = await ac.get(f"/api/v1/agents?organization_id={org_id}&limit=0")
+        assert res_zero_limit.status_code == 422
+
+        # limit=101 -> 422
+        res_over_limit = await ac.get(f"/api/v1/agents?organization_id={org_id}&limit=101")
+        assert res_over_limit.status_code == 422
+
+        # Valid pagination: skip=1, limit=1
+        res_valid = await ac.get(f"/api/v1/agents?organization_id={org_id}&skip=1&limit=1")
+        assert res_valid.status_code == 200
+        assert len(res_valid.json()) == 1
+
+        # Valid pagination boundary: skip=0, limit=100
+        res_boundary = await ac.get(f"/api/v1/agents?organization_id={org_id}&skip=0&limit=100")
+        assert res_boundary.status_code == 200
+        assert len(res_boundary.json()) >= 2
