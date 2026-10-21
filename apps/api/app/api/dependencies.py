@@ -44,8 +44,9 @@ from app.repositories.organization_quota_repository import OrganizationQuotaRepo
 from app.models.prompt import Prompt, PromptVersion
 from app.repositories.prompt_repository import PromptRepository, PromptVersionRepository
 from app.services.prompt import PromptService
-from app.models.agent_spec import AgentSpec
+from app.models.agent_spec import AgentSpec, AgentSpecVersion
 from app.repositories.agent_spec_repository import AgentSpecRepository
+from app.repositories.agent_spec_version_repository import AgentSpecVersionRepository
 from app.services.agent_spec import AgentSpecService
 from app.redis.client import redis_manager
 
@@ -624,12 +625,18 @@ def get_agent_spec_repository(db: AsyncSession = Depends(get_db)) -> AgentSpecRe
     return AgentSpecRepository(db)
 
 
+def get_agent_spec_version_repository(db: AsyncSession = Depends(get_db)) -> AgentSpecVersionRepository:
+    """Provide an AgentSpecVersionRepository instance."""
+    return AgentSpecVersionRepository(db)
+
+
 def get_agent_spec_service(
     agent_spec_repository: AgentSpecRepository = Depends(get_agent_spec_repository),
     prompt_repository: PromptRepository = Depends(get_prompt_repository),
     prompt_version_repository: PromptVersionRepository = Depends(get_prompt_version_repository),
     provider_repository: ProviderRepository = Depends(get_provider_repository),
     provider_model_repository: ProviderModelRepository = Depends(get_provider_model_repository),
+    agent_spec_version_repository: AgentSpecVersionRepository = Depends(get_agent_spec_version_repository),
 ) -> AgentSpecService:
     """Provide an AgentSpecService instance."""
     return AgentSpecService(
@@ -638,6 +645,7 @@ def get_agent_spec_service(
         prompt_version_repository=prompt_version_repository,
         provider_repository=provider_repository,
         provider_model_repository=provider_model_repository,
+        agent_spec_version_repository=agent_spec_version_repository,
     )
 
 
