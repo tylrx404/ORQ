@@ -32,6 +32,18 @@ class AgentSpecVersionRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_by_version_number(
+        self, agent_spec_id: UUID, version_number: int
+    ) -> AgentSpecVersion | None:
+        """Fetch a version by agent spec ID and version number."""
+        result = await self.db.execute(
+            select(AgentSpecVersion).where(
+                AgentSpecVersion.agent_spec_id == agent_spec_id,
+                AgentSpecVersion.version_number == version_number,
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def get_latest_version_number(self, agent_spec_id: UUID) -> int:
         """Get the current maximum version number for an agent spec."""
         result = await self.db.execute(
