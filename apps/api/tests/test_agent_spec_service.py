@@ -1184,3 +1184,248 @@ async def test_row_locking_invoked_on_mutations(service, repos):
     repos["agent_spec"].locked_ids.clear()
     await service.rollback_version(org_id, agent.id, v2.id)
     assert agent.id in repos["agent_spec"].locked_ids
+
+
+# ---------------------------------------------------------------------------
+# PR #29 Review Findings Regression Tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_create_version_explicit_null_clearing(service, repos):
+    """Verify create_version distinguishes omitted from explicitly supplied None."""
+    org_id = uuid4()
+    p_id = uuid4()
+    pv_id = uuid4()
+    prov_id = uuid4()
+    m_id = uuid4()
+
+    repos["prompt"].prompts[p_id] = Prompt(id=p_id, organization_id=org_id, name="Test Prompt")
+    repos["prompt_version"].versions[pv_id] = PromptVersion(id=pv_id, prompt_id=p_id, version_number=1, content="C")
+    repos["provider"].providers[prov_id] = Provider(id=prov_id, organization_id=org_id, name="Prov", provider_type=ProviderType.openai, api_key="k")
+    repos["model"].models[m_id] = ProviderModel(id=m_id, provider_id=prov_id, name="M1")
+
+    agent = await service.create_agent_spec(
+        organization_id=org_id,
+        name="Full Agent",
+        prompt_id=p_id,
+        prompt_version_id=pv_id,
+        provider_id=prov_id,
+        model_id=m_id,
+        tool_identifiers=["tool_a"],
+        memory_policy={"policy": "buffer"},
+    )
+    assert agent.current_version_number == 1
+
+    # 1. Explicitly clear prompt_id=None while omitting all other execution fields
+    v2 = await service.create_version(
+        organization_id=org_id,
+        agent_id=agent.id,
+        prompt_id=None,
+    )
+    assert v2.version_number == 2
+    assert v2.prompt_id is None
+    assert v2.prompt_version_id is None  # auto-cleared because prompt was cleared and prompt_version was omitted
+    # Omitted fields must be preserved
+    assert v2.provider_id == prov_id
+    assert v2.model_id == m_id
+    assert v2.tool_identifiers == ["tool_a"]
+    assert v2.memory_policy == {"policy": "buffer"}
+    # Agent pointer updated
+    assert agent.current_version_id == v2.id
+    assert agent.current_version_number == 2
+    assert agent.prompt_id is None
+    assert agent.prompt_version_id is None
+    assert agent.provider_id == prov_id
+
+    # 2. Explicitly clear provider_id=None while omitting all other fields
+    v3 = await service.create_version(
+        organization_id=org_id,
+        agent_id=agent.id,
+        provider_id=None,
+    )
+    assert v3.version_number == 3
+    assert v3.provider_id is None
+    assert v3.model_id is None  # auto-cleared because provider was cleared
+    assert v3.tool_identifiers == ["tool_a"]
+    assert v3.memory_policy == {"policy": "buffer"}
+    assert agent.current_version_id == v3.id
+    assert agent.current_version_number == 3
+    assert agent.provider_id is None
+    assert agent.model_id is None
+
+    # 3. Explicitly clear tools and memory to None
+    v4 = await service.create_version(
+        organization_id=org_id,
+        agent_id=agent.id,
+        tool_identifiers=None,
+        memory_policy=None,
+    )
+    assert v4.version_number == 4
+    assert v4.tool_identifiers == []
+    assert v4.memory_policy == {}
+    assert agent.current_version_id == v4.id
+    assert agent.current_version_number == 4
+    assert agent.tool_identifiers == []
+    assert agent.memory_policy == {}
+
+
+@pytest.mark.asyncio
+async def test_update_agent_spec_omitted_vs_explicit_null(service, repos):
+    """Verify update_agent_spec handles omitted fields vs explicit None correctly."""
+    org_id = uuid4()
+    p_id = uuid4()
+    pv_id = uuid4()
+    prov_id = uuid4()
+    m_id = uuid4()
+
+    repos["prompt"].prompts[p_id] = Prompt(id=p_id, organization_id=org_id, name="Test Prompt")
+    repos["prompt_version"].versions[pv_id] = PromptVersion(id=pv_id, prompt_id=p_id, version_number=1, content="C")
+    repos["provider"].providers[prov_id] = Provider(id=prov_id, organization_id=org_id, name="Prov", provider_type=ProviderType.openai, api_key="k")
+    repos["model"].models[m_id] = ProviderModel(id=m_id, provider_id=prov_id, name="M1")
+
+    agent = await service.create_agent_spec(
+        organization_id=org_id,
+        name="Agent 1",
+        description="Initial desc",
+        prompt_id=p_id,
+        prompt_version_id=pv_id,
+        provider_id=prov_id,
+        model_id=m_id,
+        tool_identifiers=["t1"],
+        memory_policy={"k": "v"},
+    )
+    assert agent.current_version_number == 1
+
+    # 1. Update metadata only (omitting all execution config) -> No new version, fields unchanged
+    updated_meta = await service.update_agent_spec(
+        org_id, agent.id, {"description": "Updated desc", "name": "Agent 1 Renamed"}
+    )
+    assert updated_meta.current_version_number == 1
+    assert updated_meta.description == "Updated desc"
+    assert updated_meta.name == "Agent 1 Renamed"
+    assert updated_meta.prompt_id == p_id
+    assert updated_meta.prompt_version_id == pv_id
+    assert updated_meta.provider_id == prov_id
+    assert updated_meta.model_id == m_id
+    assert updated_meta.tool_identifiers == ["t1"]
+
+    # 2. Explicitly clear prompt_version_id to None (omitting prompt_id) -> Keeps prompt_id, clears prompt_version_id
+    updated_pv = await service.update_agent_spec(
+        org_id, agent.id, {"prompt_version_id": None}
+    )
+    assert updated_pv.current_version_number == 2
+    assert updated_pv.prompt_id == p_id
+    assert updated_pv.prompt_version_id is None
+    assert updated_pv.provider_id == prov_id
+    assert updated_pv.model_id == m_id
+
+    # 3. Explicitly clear model_id to None (omitting provider_id) -> Keeps provider_id, clears model_id
+    updated_m = await service.update_agent_spec(
+        org_id, agent.id, {"model_id": None}
+    )
+    assert updated_m.current_version_number == 3
+    assert updated_m.provider_id == prov_id
+    assert updated_m.model_id is None
+
+    # 4. Explicitly clear tool_identifiers to None
+    updated_tools = await service.update_agent_spec(
+        org_id, agent.id, {"tool_identifiers": None}
+    )
+    assert updated_tools.current_version_number == 4
+    assert updated_tools.tool_identifiers == []
+
+    # 5. Explicitly clear memory_policy to None
+    updated_mem = await service.update_agent_spec(
+        org_id, agent.id, {"memory_policy": None}
+    )
+    assert updated_mem.current_version_number == 5
+    assert updated_mem.memory_policy == {}
+
+
+@pytest.mark.asyncio
+async def test_transaction_rollback_on_failed_mutation_preserves_state(service, repos):
+    """Verify failures after starting a transaction trigger rollback and preserve state."""
+    org_id = uuid4()
+    agent = await service.create_agent_spec(organization_id=org_id, name="Rollback Test Agent")
+    v1_id = agent.current_version_id
+    assert agent.current_version_number == 1
+
+    # 1. Failure during update_agent_spec commit
+    async def failing_commit():
+        raise RuntimeError("Simulated DB commit crash")
+
+    repos["agent_spec"].db.commit = failing_commit
+    repos["agent_spec"].db.rolled_back = False
+
+    with pytest.raises(RuntimeError, match="Simulated DB commit crash"):
+        await service.update_agent_spec(org_id, agent.id, {"tool_identifiers": ["new_tool"]})
+
+    assert repos["agent_spec"].db.rolled_back is True
+    # Verify no version 2 exists in version repository
+    versions = await service.list_versions(org_id, agent.id)
+    assert len(versions) == 1
+    assert versions[0].id == v1_id
+
+    # 2. Failure during create_version commit
+    repos["agent_spec"].db.commit = failing_commit
+    repos["agent_spec"].db.rolled_back = False
+
+    with pytest.raises(RuntimeError, match="Simulated DB commit crash"):
+        await service.create_version(org_id, agent.id, description="Failing V2")
+
+    assert repos["agent_spec"].db.rolled_back is True
+    versions = await service.list_versions(org_id, agent.id)
+    assert len(versions) == 1
+
+    # 3. Failure during create_agent_spec
+    repos["agent_spec"].db.commit = failing_commit
+    repos["agent_spec"].db.rolled_back = False
+
+    with pytest.raises(RuntimeError, match="Simulated DB commit crash"):
+        await service.create_agent_spec(organization_id=org_id, name="Crash Agent")
+
+    assert repos["agent_spec"].db.rolled_back is True
+    # The crashed agent spec was rolled back from repository items
+    assert not any(a.name == "Crash Agent" for a in repos["agent_spec"].items.values())
+
+
+@pytest.mark.asyncio
+async def test_current_version_consistency_after_mutations_and_rollbacks(service, repos):
+    """Verify version numbers, pointer integrity, and history after update, create_version, and rollback."""
+    org_id = uuid4()
+    agent = await service.create_agent_spec(
+        organization_id=org_id,
+        name="Consistency Agent",
+        tool_identifiers=["v1_tool"],
+    )
+    v1_id = agent.current_version_id
+    assert agent.current_version_number == 1
+
+    # Update config -> Version 2
+    await service.update_agent_spec(org_id, agent.id, {"tool_identifiers": ["v2_tool"]})
+    v2_id = agent.current_version_id
+    assert agent.current_version_number == 2
+    assert agent.current_version.version_number == 2
+    assert agent.tool_identifiers == ["v2_tool"]
+
+    # Explicit version -> Version 3
+    v3 = await service.create_version(org_id, agent.id, tool_identifiers=["v3_tool"])
+    v3_id = v3.id
+    assert agent.current_version_id == v3_id
+    assert agent.current_version_number == 3
+    assert agent.tool_identifiers == ["v3_tool"]
+
+    # Rollback to v1 -> creates Version 4 with v1 configuration
+    await service.rollback_version(org_id, agent.id, v1_id)
+    assert agent.current_version_number == 4
+    assert agent.current_version.version_number == 4
+    assert agent.tool_identifiers == ["v1_tool"]
+
+    # List all versions: should be 4 versions in descending order
+    history = await service.list_versions(org_id, agent.id)
+    assert len(history) == 4
+    assert [v.version_number for v in history] == [4, 3, 2, 1]
+    assert history[0].tool_identifiers == ["v1_tool"]
+    assert history[1].tool_identifiers == ["v3_tool"]
+    assert history[2].tool_identifiers == ["v2_tool"]
+    assert history[3].tool_identifiers == ["v1_tool"]

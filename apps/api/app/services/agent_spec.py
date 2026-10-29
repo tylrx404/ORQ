@@ -54,6 +54,9 @@ class InvalidModelReferenceError(AgentSpecException):
     pass
 
 
+_UNSET: Any = object()
+
+
 class _InMemoryVersionRepo:
     """Fallback in-memory version repository when no database session or repo is provided."""
 
@@ -154,7 +157,7 @@ class AgentSpecService:
             if hasattr(res, "__await__"):
                 await res
 
-    async def _get_for_update_or_by_id(self, agent_id: UUID) -> AgentSpec | None:
+    async def _get_locked_agent(self, agent_id: UUID) -> AgentSpec | None:
         if hasattr(self._agent_spec_repo, "get_for_update"):
             return await self._agent_spec_repo.get_for_update(agent_id)
         return await self._agent_spec_repo.get_by_id(agent_id)
@@ -295,11 +298,7 @@ class AgentSpecService:
             self._db_add(agent_spec)
             await self._db_flush()
 
-            if self._version_repo:
-                await self._version_repo.create(version_1)
-            else:
-                self._db_add(version_1)
-                await self._db_flush()
+            await self._version_repo.create(version_1)
 
             agent_spec.current_version_id = version_1.id
             agent_spec.current_version = version_1
@@ -359,139 +358,130 @@ class AgentSpecService:
         """
         await self.get_agent_spec(organization_id, agent_id)
 
-        locked_agent = await self._get_for_update_or_by_id(agent_id)
-        if not locked_agent or locked_agent.organization_id != organization_id:
-            raise AgentSpecNotFoundError(
-                f"Agent specification with ID '{agent_id}' not found."
-            )
-
-        # 1. Name uniqueness validation
-        if "name" in update_data and update_data["name"] is not None and update_data["name"] != locked_agent.name:
-            new_name = update_data["name"]
-            existing = await self._agent_spec_repo.get_by_name_and_org(organization_id, new_name)
-            if existing and existing.id != locked_agent.id:
-                raise DuplicateAgentSpecError(
-                    f"An agent specification named '{new_name}' already exists in this organization."
-                )
-            locked_agent.name = new_name
-
-        # 2. Determine effective relational references
-        if "prompt_id" in update_data:
-            effective_prompt_id = update_data["prompt_id"]
-        else:
-            effective_prompt_id = locked_agent.prompt_id
-
-        if "prompt_version_id" in update_data:
-            effective_prompt_version_id = update_data["prompt_version_id"]
-        else:
-            effective_prompt_version_id = locked_agent.prompt_version_id
-
-        # If prompt_id was explicitly cleared to None and version wasn't updated, clear version too
-        if "prompt_id" in update_data and update_data["prompt_id"] is None and "prompt_version_id" not in update_data:
-            effective_prompt_version_id = None
-
-        if "provider_id" in update_data:
-            effective_provider_id = update_data["provider_id"]
-        else:
-            effective_provider_id = locked_agent.provider_id
-
-        if "model_id" in update_data:
-            effective_model_id = update_data["model_id"]
-        else:
-            effective_model_id = locked_agent.model_id
-
-        # If provider_id was explicitly cleared to None and model wasn't updated, clear model too
-        if "provider_id" in update_data and update_data["provider_id"] is None and "model_id" not in update_data:
-            effective_model_id = None
-
-        resolved_prompt_id, resolved_version_id, resolved_provider_id, resolved_model_id = (
-            await self._validate_references(
-                organization_id=organization_id,
-                prompt_id=effective_prompt_id,
-                prompt_version_id=effective_prompt_version_id,
-                provider_id=effective_provider_id,
-                model_id=effective_model_id,
-            )
-        )
-
-        effective_tools = (
-            list(update_data["tool_identifiers"])
-            if "tool_identifiers" in update_data and update_data["tool_identifiers"] is not None
-            else list(locked_agent.tool_identifiers or [])
-        )
-        effective_memory = (
-            dict(update_data["memory_policy"])
-            if "memory_policy" in update_data and update_data["memory_policy"] is not None
-            else dict(locked_agent.memory_policy or {})
-        )
-
-        config_changed = (
-            resolved_prompt_id != locked_agent.prompt_id
-            or resolved_version_id != locked_agent.prompt_version_id
-            or resolved_provider_id != locked_agent.provider_id
-            or resolved_model_id != locked_agent.model_id
-            or effective_tools != list(locked_agent.tool_identifiers or [])
-            or effective_memory != dict(locked_agent.memory_policy or {})
-        )
-
-        now = datetime.now(timezone.utc)
-        new_version = None
-        next_version_num = None
-
-        if config_changed:
-            latest_v = (
-                await self._version_repo.get_latest_version_number(agent_id)
-                if self._version_repo
-                else 0
-            )
-            if latest_v == 0 or locked_agent.current_version_id is None:
-                next_version_num = 1
-                v_desc = (
-                    update_data.get("version_description")
-                    or "Initial version from legacy configuration"
-                )
-            else:
-                next_version_num = latest_v + 1
-                v_desc = (
-                    update_data.get("version_description")
-                    or f"Update to version {next_version_num}"
-                )
-
-            new_version = AgentSpecVersion(
-                id=uuid.uuid4(),
-                agent_spec_id=locked_agent.id,
-                version_number=next_version_num,
-                description=v_desc,
-                prompt_id=resolved_prompt_id,
-                prompt_version_id=resolved_version_id,
-                provider_id=resolved_provider_id,
-                model_id=resolved_model_id,
-                tool_identifiers=list(effective_tools),
-                memory_policy=dict(effective_memory),
-                created_at=now,
-            )
-
-        # 3. Apply updates to entity
-        locked_agent.prompt_id = resolved_prompt_id
-        locked_agent.prompt_version_id = resolved_version_id
-        locked_agent.provider_id = resolved_provider_id
-        locked_agent.model_id = resolved_model_id
-        locked_agent.tool_identifiers = effective_tools
-        locked_agent.memory_policy = effective_memory
-        locked_agent.updated_at = now
-
-        if "description" in update_data:
-            locked_agent.description = update_data["description"]
-        if "is_active" in update_data and update_data["is_active"] is not None:
-            locked_agent.is_active = update_data["is_active"]
-
         try:
-            if config_changed and new_version is not None:
-                if self._version_repo:
-                    await self._version_repo.create(new_version)
+            locked_agent = await self._get_locked_agent(agent_id)
+            if not locked_agent or locked_agent.organization_id != organization_id:
+                raise AgentSpecNotFoundError(
+                    f"Agent specification with ID '{agent_id}' not found."
+                )
+
+            # 1. Name uniqueness validation
+            if "name" in update_data and update_data["name"] is not None and update_data["name"] != locked_agent.name:
+                new_name = update_data["name"]
+                existing = await self._agent_spec_repo.get_by_name_and_org(organization_id, new_name)
+                if existing and existing.id != locked_agent.id:
+                    raise DuplicateAgentSpecError(
+                        f"An agent specification named '{new_name}' already exists in this organization."
+                    )
+                locked_agent.name = new_name
+
+            # 2. Determine effective relational references
+            if "prompt_id" in update_data:
+                effective_prompt_id = update_data["prompt_id"]
+            else:
+                effective_prompt_id = locked_agent.prompt_id
+
+            if "prompt_version_id" in update_data:
+                effective_prompt_version_id = update_data["prompt_version_id"]
+            else:
+                effective_prompt_version_id = locked_agent.prompt_version_id
+
+            # If prompt_id was explicitly cleared to None and version wasn't specified in update, clear version too
+            if "prompt_id" in update_data and update_data["prompt_id"] is None and "prompt_version_id" not in update_data:
+                effective_prompt_version_id = None
+
+            if "provider_id" in update_data:
+                effective_provider_id = update_data["provider_id"]
+            else:
+                effective_provider_id = locked_agent.provider_id
+
+            if "model_id" in update_data:
+                effective_model_id = update_data["model_id"]
+            else:
+                effective_model_id = locked_agent.model_id
+
+            # If provider_id was explicitly cleared to None and model wasn't specified in update, clear model too
+            if "provider_id" in update_data and update_data["provider_id"] is None and "model_id" not in update_data:
+                effective_model_id = None
+
+            resolved_prompt_id, resolved_version_id, resolved_provider_id, resolved_model_id = (
+                await self._validate_references(
+                    organization_id=organization_id,
+                    prompt_id=effective_prompt_id,
+                    prompt_version_id=effective_prompt_version_id,
+                    provider_id=effective_provider_id,
+                    model_id=effective_model_id,
+                )
+            )
+
+            if "tool_identifiers" in update_data:
+                effective_tools = list(update_data["tool_identifiers"] or [])
+            else:
+                effective_tools = list(locked_agent.tool_identifiers or [])
+
+            if "memory_policy" in update_data:
+                effective_memory = dict(update_data["memory_policy"] or {})
+            else:
+                effective_memory = dict(locked_agent.memory_policy or {})
+
+            config_changed = (
+                resolved_prompt_id != locked_agent.prompt_id
+                or resolved_version_id != locked_agent.prompt_version_id
+                or resolved_provider_id != locked_agent.provider_id
+                or resolved_model_id != locked_agent.model_id
+                or effective_tools != list(locked_agent.tool_identifiers or [])
+                or effective_memory != dict(locked_agent.memory_policy or {})
+            )
+
+            now = datetime.now(timezone.utc)
+            new_version = None
+            next_version_num = None
+
+            if config_changed:
+                latest_v = await self._version_repo.get_latest_version_number(agent_id)
+                if latest_v == 0 or locked_agent.current_version_id is None:
+                    next_version_num = 1
+                    v_desc = (
+                        update_data.get("version_description")
+                        or "Initial version from legacy configuration"
+                    )
                 else:
-                    self._db_add(new_version)
-                    await self._db_flush()
+                    next_version_num = latest_v + 1
+                    v_desc = (
+                        update_data.get("version_description")
+                        or f"Update to version {next_version_num}"
+                    )
+
+                new_version = AgentSpecVersion(
+                    id=uuid.uuid4(),
+                    agent_spec_id=locked_agent.id,
+                    version_number=next_version_num,
+                    description=v_desc,
+                    prompt_id=resolved_prompt_id,
+                    prompt_version_id=resolved_version_id,
+                    provider_id=resolved_provider_id,
+                    model_id=resolved_model_id,
+                    tool_identifiers=list(effective_tools),
+                    memory_policy=dict(effective_memory),
+                    created_at=now,
+                )
+
+            # 3. Apply updates to entity
+            locked_agent.prompt_id = resolved_prompt_id
+            locked_agent.prompt_version_id = resolved_version_id
+            locked_agent.provider_id = resolved_provider_id
+            locked_agent.model_id = resolved_model_id
+            locked_agent.tool_identifiers = effective_tools
+            locked_agent.memory_policy = effective_memory
+            locked_agent.updated_at = now
+
+            if "description" in update_data:
+                locked_agent.description = update_data["description"]
+            if "is_active" in update_data and update_data["is_active"] is not None:
+                locked_agent.is_active = update_data["is_active"]
+
+            if config_changed and new_version is not None:
+                await self._version_repo.create(new_version)
 
                 locked_agent.current_version_id = new_version.id
                 locked_agent.current_version = new_version
@@ -519,12 +509,12 @@ class AgentSpecService:
         organization_id: UUID,
         agent_id: UUID,
         description: str | None = None,
-        prompt_id: UUID | None = None,
-        prompt_version_id: UUID | None = None,
-        provider_id: UUID | None = None,
-        model_id: UUID | None = None,
-        tool_identifiers: list[str] | None = None,
-        memory_policy: dict[str, Any] | None = None,
+        prompt_id: UUID | None | object = _UNSET,
+        prompt_version_id: UUID | None | object = _UNSET,
+        provider_id: UUID | None | object = _UNSET,
+        model_id: UUID | None | object = _UNSET,
+        tool_identifiers: list[str] | None | object = _UNSET,
+        memory_policy: dict[str, Any] | None | object = _UNSET,
     ) -> AgentSpecVersion:
         """Create a new version explicitly from the agent's effective configuration or provided overrides.
 
@@ -533,69 +523,72 @@ class AgentSpecService:
         """
         await self.get_agent_spec(organization_id, agent_id)
 
-        locked_agent = await self._get_for_update_or_by_id(agent_id)
-        if not locked_agent or locked_agent.organization_id != organization_id:
-            raise AgentSpecNotFoundError(
-                f"Agent specification with ID '{agent_id}' not found."
-            )
-
-        target_prompt_id = prompt_id if prompt_id is not None else locked_agent.prompt_id
-        target_prompt_version_id = (
-            prompt_version_id if prompt_version_id is not None else locked_agent.prompt_version_id
-        )
-        target_provider_id = (
-            provider_id if provider_id is not None else locked_agent.provider_id
-        )
-        target_model_id = model_id if model_id is not None else locked_agent.model_id
-        target_tools = (
-            list(tool_identifiers) if tool_identifiers is not None else list(locked_agent.tool_identifiers or [])
-        )
-        target_memory = (
-            dict(memory_policy) if memory_policy is not None else dict(locked_agent.memory_policy or {})
-        )
-
-        resolved_prompt_id, resolved_version_id, resolved_provider_id, resolved_model_id = (
-            await self._validate_references(
-                organization_id=organization_id,
-                prompt_id=target_prompt_id,
-                prompt_version_id=target_prompt_version_id,
-                provider_id=target_provider_id,
-                model_id=target_model_id,
-            )
-        )
-
-        latest_v = (
-            await self._version_repo.get_latest_version_number(agent_id)
-            if self._version_repo
-            else 0
-        )
-        if latest_v == 0 or locked_agent.current_version_id is None:
-            next_version_num = 1
-        else:
-            next_version_num = latest_v + 1
-
-        now = datetime.now(timezone.utc)
-        v_desc = description if description is not None else f"Version {next_version_num}"
-        version = AgentSpecVersion(
-            id=uuid.uuid4(),
-            agent_spec_id=agent_id,
-            version_number=next_version_num,
-            description=v_desc,
-            prompt_id=resolved_prompt_id,
-            prompt_version_id=resolved_version_id,
-            provider_id=resolved_provider_id,
-            model_id=resolved_model_id,
-            tool_identifiers=list(target_tools),
-            memory_policy=dict(target_memory),
-            created_at=now,
-        )
-
         try:
-            if self._version_repo:
-                await self._version_repo.create(version)
+            locked_agent = await self._get_locked_agent(agent_id)
+            if not locked_agent or locked_agent.organization_id != organization_id:
+                raise AgentSpecNotFoundError(
+                    f"Agent specification with ID '{agent_id}' not found."
+                )
+
+            effective_prompt_id = locked_agent.prompt_id if prompt_id is _UNSET else prompt_id
+            effective_prompt_version_id = (
+                locked_agent.prompt_version_id if prompt_version_id is _UNSET else prompt_version_id
+            )
+            # If prompt_id was explicitly cleared to None and prompt_version_id was omitted, clear version too
+            if prompt_id is None and prompt_version_id is _UNSET:
+                effective_prompt_version_id = None
+
+            effective_provider_id = (
+                locked_agent.provider_id if provider_id is _UNSET else provider_id
+            )
+            effective_model_id = locked_agent.model_id if model_id is _UNSET else model_id
+            # If provider_id was explicitly cleared to None and model_id was omitted, clear model too
+            if provider_id is None and model_id is _UNSET:
+                effective_model_id = None
+
+            if tool_identifiers is _UNSET:
+                target_tools = list(locked_agent.tool_identifiers or [])
             else:
-                self._db_add(version)
-                await self._db_flush()
+                target_tools = list(tool_identifiers) if tool_identifiers is not None else []
+
+            if memory_policy is _UNSET:
+                target_memory = dict(locked_agent.memory_policy or {})
+            else:
+                target_memory = dict(memory_policy) if memory_policy is not None else {}
+
+            resolved_prompt_id, resolved_version_id, resolved_provider_id, resolved_model_id = (
+                await self._validate_references(
+                    organization_id=organization_id,
+                    prompt_id=effective_prompt_id,
+                    prompt_version_id=effective_prompt_version_id,
+                    provider_id=effective_provider_id,
+                    model_id=effective_model_id,
+                )
+            )
+
+            latest_v = await self._version_repo.get_latest_version_number(agent_id)
+            if latest_v == 0 or locked_agent.current_version_id is None:
+                next_version_num = 1
+            else:
+                next_version_num = latest_v + 1
+
+            now = datetime.now(timezone.utc)
+            v_desc = description if description is not None else f"Version {next_version_num}"
+            version = AgentSpecVersion(
+                id=uuid.uuid4(),
+                agent_spec_id=agent_id,
+                version_number=next_version_num,
+                description=v_desc,
+                prompt_id=resolved_prompt_id,
+                prompt_version_id=resolved_version_id,
+                provider_id=resolved_provider_id,
+                model_id=resolved_model_id,
+                tool_identifiers=list(target_tools),
+                memory_policy=dict(target_memory),
+                created_at=now,
+            )
+
+            await self._version_repo.create(version)
 
             locked_agent.prompt_id = resolved_prompt_id
             locked_agent.prompt_version_id = resolved_version_id
@@ -626,8 +619,6 @@ class AgentSpecService:
     ) -> Sequence[AgentSpecVersion]:
         """List all versions of an agent spec ordered by version number descending."""
         await self.get_agent_spec(organization_id, agent_id)
-        if not self._version_repo:
-            return []
         return await self._version_repo.list_by_agent(agent_id, skip=skip, limit=limit)
 
     async def get_version(
@@ -638,11 +629,7 @@ class AgentSpecService:
     ) -> AgentSpecVersion:
         """Retrieve a specific version of an agent spec."""
         await self.get_agent_spec(organization_id, agent_id)
-        version = (
-            await self._version_repo.get_by_agent_and_id(agent_id, version_id)
-            if self._version_repo
-            else None
-        )
+        version = await self._version_repo.get_by_agent_and_id(agent_id, version_id)
         if not version:
             raise AgentSpecVersionNotFoundError(
                 f"Agent specification version '{version_id}' not found for agent '{agent_id}'."
@@ -663,66 +650,54 @@ class AgentSpecService:
         """
         await self.get_agent_spec(organization_id, agent_id)
 
-        locked_agent = await self._get_for_update_or_by_id(agent_id)
-        if not locked_agent or locked_agent.organization_id != organization_id:
-            raise AgentSpecNotFoundError(
-                f"Agent specification with ID '{agent_id}' not found."
-            )
-
-        target_version = (
-            await self._version_repo.get_by_agent_and_id(agent_id, target_version_id)
-            if self._version_repo
-            else None
-        )
-        if not target_version:
-            raise AgentSpecVersionNotFoundError(
-                f"Agent specification version '{target_version_id}' not found for agent '{agent_id}'."
-            )
-
-        resolved_prompt_id, resolved_version_id, resolved_provider_id, resolved_model_id = (
-            await self._validate_references(
-                organization_id=organization_id,
-                prompt_id=target_version.prompt_id,
-                prompt_version_id=target_version.prompt_version_id,
-                provider_id=target_version.provider_id,
-                model_id=target_version.model_id,
-            )
-        )
-
-        latest_v = (
-            await self._version_repo.get_latest_version_number(agent_id)
-            if self._version_repo
-            else 0
-        )
-        next_version_num = latest_v + 1
-
-        rollback_desc = (
-            description
-            if description is not None
-            else f"Rollback to version {target_version.version_number}"
-        )
-
-        now = datetime.now(timezone.utc)
-        new_version = AgentSpecVersion(
-            id=uuid.uuid4(),
-            agent_spec_id=agent_id,
-            version_number=next_version_num,
-            description=rollback_desc,
-            prompt_id=resolved_prompt_id,
-            prompt_version_id=resolved_version_id,
-            provider_id=resolved_provider_id,
-            model_id=resolved_model_id,
-            tool_identifiers=list(target_version.tool_identifiers or []),
-            memory_policy=dict(target_version.memory_policy or {}),
-            created_at=now,
-        )
-
         try:
-            if self._version_repo:
-                await self._version_repo.create(new_version)
-            else:
-                self._db_add(new_version)
-                await self._db_flush()
+            locked_agent = await self._get_locked_agent(agent_id)
+            if not locked_agent or locked_agent.organization_id != organization_id:
+                raise AgentSpecNotFoundError(
+                    f"Agent specification with ID '{agent_id}' not found."
+                )
+
+            target_version = await self._version_repo.get_by_agent_and_id(agent_id, target_version_id)
+            if not target_version:
+                raise AgentSpecVersionNotFoundError(
+                    f"Agent specification version '{target_version_id}' not found for agent '{agent_id}'."
+                )
+
+            resolved_prompt_id, resolved_version_id, resolved_provider_id, resolved_model_id = (
+                await self._validate_references(
+                    organization_id=organization_id,
+                    prompt_id=target_version.prompt_id,
+                    prompt_version_id=target_version.prompt_version_id,
+                    provider_id=target_version.provider_id,
+                    model_id=target_version.model_id,
+                )
+            )
+
+            latest_v = await self._version_repo.get_latest_version_number(agent_id)
+            next_version_num = latest_v + 1
+
+            rollback_desc = (
+                description
+                if description is not None
+                else f"Rollback to version {target_version.version_number}"
+            )
+
+            now = datetime.now(timezone.utc)
+            new_version = AgentSpecVersion(
+                id=uuid.uuid4(),
+                agent_spec_id=agent_id,
+                version_number=next_version_num,
+                description=rollback_desc,
+                prompt_id=resolved_prompt_id,
+                prompt_version_id=resolved_version_id,
+                provider_id=resolved_provider_id,
+                model_id=resolved_model_id,
+                tool_identifiers=list(target_version.tool_identifiers or []),
+                memory_policy=dict(target_version.memory_policy or {}),
+                created_at=now,
+            )
+
+            await self._version_repo.create(new_version)
 
             locked_agent.prompt_id = resolved_prompt_id
             locked_agent.prompt_version_id = resolved_version_id
