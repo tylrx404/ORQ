@@ -35,6 +35,25 @@ class MockDB:
         self.flushed = False
         self._uncommitted_agents: set[UUID] = set()
         self._uncommitted_versions: set[UUID] = set()
+        self._agent_snapshots: dict[UUID, dict[str, Any]] = {}
+
+    def snapshot_agent(self, agent: AgentSpec) -> None:
+        if agent.id not in self._agent_snapshots:
+            self._agent_snapshots[agent.id] = {
+                "name": agent.name,
+                "description": agent.description,
+                "prompt_id": agent.prompt_id,
+                "prompt_version_id": agent.prompt_version_id,
+                "provider_id": agent.provider_id,
+                "model_id": agent.model_id,
+                "tool_identifiers": list(agent.tool_identifiers) if agent.tool_identifiers is not None else [],
+                "memory_policy": dict(agent.memory_policy) if agent.memory_policy is not None else {},
+                "is_active": agent.is_active,
+                "current_version_id": agent.current_version_id,
+                "current_version": agent.current_version,
+                "current_version_number": agent.current_version_number,
+                "updated_at": agent.updated_at,
+            }
 
     def add(self, obj):
         now = datetime.now(timezone.utc)
@@ -64,6 +83,7 @@ class MockDB:
                 await self.agent_repo.create(None)
         self._uncommitted_agents.clear()
         self._uncommitted_versions.clear()
+        self._agent_snapshots.clear()
 
     async def refresh(self, obj):
         pass
@@ -73,11 +93,17 @@ class MockDB:
         if self.agent_repo:
             for aid in list(self._uncommitted_agents):
                 self.agent_repo.items.pop(aid, None)
+            for aid, snap in list(self._agent_snapshots.items()):
+                if aid in self.agent_repo.items:
+                    agent = self.agent_repo.items[aid]
+                    for k, v in snap.items():
+                        setattr(agent, k, v)
         if self.version_repo:
             for vid in list(self._uncommitted_versions):
                 self.version_repo.versions.pop(vid, None)
         self._uncommitted_agents.clear()
         self._uncommitted_versions.clear()
+        self._agent_snapshots.clear()
 
 
 class MockAgentSpecRepository:
@@ -118,7 +144,10 @@ class MockAgentSpecRepository:
 
     async def get_for_update(self, agent_id: UUID) -> AgentSpec | None:
         self.locked_ids.append(agent_id)
-        return self.items.get(agent_id)
+        item = self.items.get(agent_id)
+        if item and self.db:
+            self.db.snapshot_agent(item)
+        return item
 
     async def create(self, agent_spec: AgentSpec) -> AgentSpec:
         if getattr(agent_spec, "created_at", None) is None:
@@ -1344,11 +1373,21 @@ async def test_update_agent_spec_omitted_vs_explicit_null(service, repos):
 
 @pytest.mark.asyncio
 async def test_transaction_rollback_on_failed_mutation_preserves_state(service, repos):
-    """Verify failures after starting a transaction trigger rollback and preserve state."""
+    """Verify failures after starting a transaction trigger rollback and preserve state.
+
+    Note: In unit tests, MockDB simulates rollback by restoring in-memory entity snapshots
+    and dropping uncommitted versions. True multi-connection ACID isolation and PostgreSQL
+    row locking must be verified in a live database environment.
+    """
     org_id = uuid4()
-    agent = await service.create_agent_spec(organization_id=org_id, name="Rollback Test Agent")
+    agent = await service.create_agent_spec(
+        organization_id=org_id,
+        name="Rollback Test Agent",
+        tool_identifiers=["v1_tool"],
+    )
     v1_id = agent.current_version_id
     assert agent.current_version_number == 1
+    assert agent.tool_identifiers == ["v1_tool"]
 
     # 1. Failure during update_agent_spec commit
     async def failing_commit():
@@ -1361,6 +1400,10 @@ async def test_transaction_rollback_on_failed_mutation_preserves_state(service, 
         await service.update_agent_spec(org_id, agent.id, {"tool_identifiers": ["new_tool"]})
 
     assert repos["agent_spec"].db.rolled_back is True
+    # Configuration and current-version pointer remain consistent with Version 1
+    assert agent.current_version_id == v1_id
+    assert agent.current_version_number == 1
+    assert agent.tool_identifiers == ["v1_tool"]
     # Verify no version 2 exists in version repository
     versions = await service.list_versions(org_id, agent.id)
     assert len(versions) == 1
@@ -1371,11 +1414,15 @@ async def test_transaction_rollback_on_failed_mutation_preserves_state(service, 
     repos["agent_spec"].db.rolled_back = False
 
     with pytest.raises(RuntimeError, match="Simulated DB commit crash"):
-        await service.create_version(org_id, agent.id, description="Failing V2")
+        await service.create_version(org_id, agent.id, description="Failing V2", tool_identifiers=["v2_tool"])
 
     assert repos["agent_spec"].db.rolled_back is True
+    assert agent.current_version_id == v1_id
+    assert agent.current_version_number == 1
+    assert agent.tool_identifiers == ["v1_tool"]
     versions = await service.list_versions(org_id, agent.id)
     assert len(versions) == 1
+    assert versions[0].id == v1_id
 
     # 3. Failure during create_agent_spec
     repos["agent_spec"].db.commit = failing_commit
@@ -1429,3 +1476,166 @@ async def test_current_version_consistency_after_mutations_and_rollbacks(service
     assert history[1].tool_identifiers == ["v3_tool"]
     assert history[2].tool_identifiers == ["v2_tool"]
     assert history[3].tool_identifiers == ["v1_tool"]
+
+
+@pytest.mark.asyncio
+async def test_lookup_and_locking_failure_triggers_transaction_rollback(service, repos):
+    """Verify lookup and locking failures during mutations trigger transaction rollback."""
+    org_id = uuid4()
+    agent = await service.create_agent_spec(
+        organization_id=org_id,
+        name="Lock Failure Agent",
+        tool_identifiers=["v1_tool"],
+    )
+    v1_id = agent.current_version_id
+
+    # 1. Failure during initial lookup in create_agent_spec
+    async def failing_lookup(*args, **kwargs):
+        raise RuntimeError("Database lookup failed")
+
+    repos["agent_spec"].get_by_name_and_org = failing_lookup
+    repos["agent_spec"].db.rolled_back = False
+
+    with pytest.raises(RuntimeError, match="Database lookup failed"):
+        await service.create_agent_spec(organization_id=org_id, name="Lookup Crash Agent")
+
+    assert repos["agent_spec"].db.rolled_back is True
+    assert not any(a.name == "Lookup Crash Agent" for a in repos["agent_spec"].items.values())
+
+    # 2. Failure during row locking in update_agent_spec
+    async def failing_lock(*args, **kwargs):
+        raise RuntimeError("Row lock timeout")
+
+    repos["agent_spec"].get_for_update = failing_lock
+    repos["agent_spec"].db.rolled_back = False
+
+    with pytest.raises(RuntimeError, match="Row lock timeout"):
+        await service.update_agent_spec(org_id, agent.id, {"tool_identifiers": ["new_tool"]})
+
+    assert repos["agent_spec"].db.rolled_back is True
+    assert agent.tool_identifiers == ["v1_tool"]
+    assert agent.current_version_id == v1_id
+
+    # 3. Failure during row locking in create_version
+    repos["agent_spec"].db.rolled_back = False
+
+    with pytest.raises(RuntimeError, match="Row lock timeout"):
+        await service.create_version(org_id, agent.id, description="V2")
+
+    assert repos["agent_spec"].db.rolled_back is True
+    assert agent.current_version_id == v1_id
+
+    # 4. Failure during row locking in rollback_version
+    repos["agent_spec"].db.rolled_back = False
+
+    with pytest.raises(RuntimeError, match="Row lock timeout"):
+        await service.rollback_version(org_id, agent.id, v1_id)
+
+    assert repos["agent_spec"].db.rolled_back is True
+    assert agent.current_version_id == v1_id
+
+
+@pytest.mark.asyncio
+async def test_flush_failure_leaves_no_partial_persisted_state(service, repos):
+    """Verify flush and version creation failures roll back without leaving partial state."""
+    org_id = uuid4()
+
+    # 1. create_agent_spec fails during db.flush
+    async def failing_flush():
+        raise RuntimeError("DB flush failed on insert")
+
+    repos["agent_spec"].db.flush = failing_flush
+    repos["agent_spec"].db.rolled_back = False
+
+    with pytest.raises(RuntimeError, match="DB flush failed on insert"):
+        await service.create_agent_spec(organization_id=org_id, name="Flush Fail Agent")
+
+    assert repos["agent_spec"].db.rolled_back is True
+    assert not any(a.name == "Flush Fail Agent" for a in repos["agent_spec"].items.values())
+    assert len(repos["agent_spec_version"].versions) == 0
+
+    # Restore flush
+    async def normal_flush():
+        repos["agent_spec"].db.flushed = True
+
+    repos["agent_spec"].db.flush = normal_flush
+
+    agent = await service.create_agent_spec(
+        organization_id=org_id,
+        name="Flush Success Agent",
+        tool_identifiers=["initial_tool"],
+    )
+    v1_id = agent.current_version_id
+
+    # 2. update_agent_spec fails during version creation
+    async def failing_version_create(*args, **kwargs):
+        raise RuntimeError("Version repo create failed")
+
+    repos["agent_spec_version"].create = failing_version_create
+    repos["agent_spec"].db.rolled_back = False
+
+    with pytest.raises(RuntimeError, match="Version repo create failed"):
+        await service.update_agent_spec(org_id, agent.id, {"tool_identifiers": ["mutated_tool"]})
+
+    assert repos["agent_spec"].db.rolled_back is True
+    # The agent's pointer and version history remain at Version 1
+    versions = await service.list_versions(org_id, agent.id)
+    assert len(versions) == 1
+    assert versions[0].id == v1_id
+    assert agent.current_version_id == v1_id
+    assert agent.current_version_number == 1
+    assert agent.tool_identifiers == ["initial_tool"]
+
+
+@pytest.mark.asyncio
+async def test_create_agent_spec_duplicate_name_triggers_rollback_and_preserves_exception(service, repos):
+    """Verify duplicate name check inside try block triggers rollback and preserves DuplicateAgentSpecError."""
+    org_id = uuid4()
+    await service.create_agent_spec(organization_id=org_id, name="Unique Agent")
+
+    repos["agent_spec"].db.rolled_back = False
+    with pytest.raises(DuplicateAgentSpecError) as exc_info:
+        await service.create_agent_spec(organization_id=org_id, name="Unique Agent")
+
+    assert "already exists in this organization" in str(exc_info.value)
+    assert repos["agent_spec"].db.rolled_back is True
+
+
+@pytest.mark.asyncio
+async def test_create_agent_spec_invalid_reference_triggers_rollback_and_preserves_exception(service, repos):
+    """Verify reference validation inside try block triggers rollback and preserves InvalidReferenceError."""
+    org_id = uuid4()
+    foreign_org = uuid4()
+    foreign_prompt_id = uuid4()
+    repos["prompt"].prompts[foreign_prompt_id] = Prompt(
+        id=foreign_prompt_id, organization_id=foreign_org, name="Foreign Prompt"
+    )
+
+    repos["agent_spec"].db.rolled_back = False
+    with pytest.raises(InvalidPromptReferenceError) as exc_info:
+        await service.create_agent_spec(
+            organization_id=org_id,
+            name="Referencing Agent",
+            prompt_id=foreign_prompt_id,
+        )
+
+    assert "not found in this organization" in str(exc_info.value)
+    assert repos["agent_spec"].db.rolled_back is True
+    assert not any(a.name == "Referencing Agent" for a in repos["agent_spec"].items.values())
+
+
+@pytest.mark.asyncio
+async def test_rollback_failure_does_not_mask_original_exception(service, repos):
+    """Verify failure during _db_rollback does not mask the original domain or database exception."""
+    org_id = uuid4()
+    await service.create_agent_spec(organization_id=org_id, name="Safe Rollback Agent")
+
+    # Simulate secondary rollback failure
+    async def failing_rollback():
+        raise RuntimeError("Rollback connection lost")
+
+    repos["agent_spec"].db.rollback = failing_rollback
+
+    # The domain exception must still be raised, NOT RuntimeError("Rollback connection lost")
+    with pytest.raises(DuplicateAgentSpecError):
+        await service.create_agent_spec(organization_id=org_id, name="Safe Rollback Agent")

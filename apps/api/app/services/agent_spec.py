@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Sequence
@@ -12,6 +13,8 @@ from app.repositories.agent_spec_version_repository import AgentSpecVersionRepos
 from app.repositories.prompt_repository import PromptRepository, PromptVersionRepository
 from app.repositories.provider_model_repository import ProviderModelRepository
 from app.repositories.provider_repository import ProviderRepository
+
+logger = logging.getLogger(__name__)
 
 
 class AgentSpecException(Exception):
@@ -153,9 +156,13 @@ class AgentSpecService:
 
     async def _db_rollback(self) -> None:
         if hasattr(self._agent_spec_repo, "db") and hasattr(self._agent_spec_repo.db, "rollback"):
-            res = self._agent_spec_repo.db.rollback()
-            if hasattr(res, "__await__"):
-                await res
+            try:
+                res = self._agent_spec_repo.db.rollback()
+                if hasattr(res, "__await__"):
+                    await res
+            except Exception as e:
+                # Do not allow secondary rollback failures (e.g. broken connection) to mask the original exception
+                logger.warning("Database rollback failed during exception handling: %s", e)
 
     async def _get_locked_agent(self, agent_id: UUID) -> AgentSpec | None:
         if hasattr(self._agent_spec_repo, "get_for_update"):
@@ -239,62 +246,62 @@ class AgentSpecService:
         version_description: str | None = None,
     ) -> AgentSpec:
         """Create a new AgentSpec after validating unique name and entity references, atomically generating Version 1."""
-        existing = await self._agent_spec_repo.get_by_name_and_org(organization_id, name)
-        if existing:
-            raise DuplicateAgentSpecError(
-                f"An agent specification named '{name}' already exists in this organization."
-            )
-
-        resolved_prompt_id, resolved_version_id, resolved_provider_id, resolved_model_id = (
-            await self._validate_references(
-                organization_id=organization_id,
-                prompt_id=prompt_id,
-                prompt_version_id=prompt_version_id,
-                provider_id=provider_id,
-                model_id=model_id,
-            )
-        )
-
-        agent_id = uuid.uuid4()
-        version_id = uuid.uuid4()
-        now = datetime.now(timezone.utc)
-
-        tools = list(tool_identifiers) if tool_identifiers is not None else []
-        memory = dict(memory_policy) if memory_policy is not None else {}
-
-        agent_spec = AgentSpec(
-            id=agent_id,
-            organization_id=organization_id,
-            name=name,
-            description=description,
-            prompt_id=resolved_prompt_id,
-            prompt_version_id=resolved_version_id,
-            provider_id=resolved_provider_id,
-            model_id=resolved_model_id,
-            tool_identifiers=tools,
-            memory_policy=memory,
-            is_active=is_active,
-            current_version_id=None,
-            created_at=now,
-            updated_at=now,
-        )
-
-        v1_desc = version_description if version_description is not None else "Initial version"
-        version_1 = AgentSpecVersion(
-            id=version_id,
-            agent_spec_id=agent_id,
-            version_number=1,
-            description=v1_desc,
-            prompt_id=resolved_prompt_id,
-            prompt_version_id=resolved_version_id,
-            provider_id=resolved_provider_id,
-            model_id=resolved_model_id,
-            tool_identifiers=list(tools),
-            memory_policy=dict(memory),
-            created_at=now,
-        )
-
         try:
+            existing = await self._agent_spec_repo.get_by_name_and_org(organization_id, name)
+            if existing:
+                raise DuplicateAgentSpecError(
+                    f"An agent specification named '{name}' already exists in this organization."
+                )
+
+            resolved_prompt_id, resolved_version_id, resolved_provider_id, resolved_model_id = (
+                await self._validate_references(
+                    organization_id=organization_id,
+                    prompt_id=prompt_id,
+                    prompt_version_id=prompt_version_id,
+                    provider_id=provider_id,
+                    model_id=model_id,
+                )
+            )
+
+            agent_id = uuid.uuid4()
+            version_id = uuid.uuid4()
+            now = datetime.now(timezone.utc)
+
+            tools = list(tool_identifiers) if tool_identifiers is not None else []
+            memory = dict(memory_policy) if memory_policy is not None else {}
+
+            agent_spec = AgentSpec(
+                id=agent_id,
+                organization_id=organization_id,
+                name=name,
+                description=description,
+                prompt_id=resolved_prompt_id,
+                prompt_version_id=resolved_version_id,
+                provider_id=resolved_provider_id,
+                model_id=resolved_model_id,
+                tool_identifiers=tools,
+                memory_policy=memory,
+                is_active=is_active,
+                current_version_id=None,
+                created_at=now,
+                updated_at=now,
+            )
+
+            v1_desc = version_description if version_description is not None else "Initial version"
+            version_1 = AgentSpecVersion(
+                id=version_id,
+                agent_spec_id=agent_id,
+                version_number=1,
+                description=v1_desc,
+                prompt_id=resolved_prompt_id,
+                prompt_version_id=resolved_version_id,
+                provider_id=resolved_provider_id,
+                model_id=resolved_model_id,
+                tool_identifiers=list(tools),
+                memory_policy=dict(memory),
+                created_at=now,
+            )
+
             self._db_add(agent_spec)
             await self._db_flush()
 
@@ -356,8 +363,6 @@ class AgentSpecService:
         version atomically. If metadata-only changes occur, preserves the existing version.
         Handles legacy unversioned agents by creating Version 1 on their first configuration mutation.
         """
-        await self.get_agent_spec(organization_id, agent_id)
-
         try:
             locked_agent = await self._get_locked_agent(agent_id)
             if not locked_agent or locked_agent.organization_id != organization_id:
@@ -521,8 +526,6 @@ class AgentSpecService:
         Locks the agent row, assigns the next sequential version number, and updates
         current_version_id atomically.
         """
-        await self.get_agent_spec(organization_id, agent_id)
-
         try:
             locked_agent = await self._get_locked_agent(agent_id)
             if not locked_agent or locked_agent.organization_id != organization_id:
@@ -648,8 +651,6 @@ class AgentSpecService:
         The historical version is never modified or deleted. Validates that the historical version
         belongs to this agent and that its referenced entities are still valid.
         """
-        await self.get_agent_spec(organization_id, agent_id)
-
         try:
             locked_agent = await self._get_locked_agent(agent_id)
             if not locked_agent or locked_agent.organization_id != organization_id:
